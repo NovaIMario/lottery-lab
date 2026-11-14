@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-14T19:00:27.740Z",
+  "updated": "2026-11-14T19:09:18.841Z",
   "games": {
     "euromillions": {
       "drawNumber": 1998,
@@ -498,8 +498,7 @@
           "each": 9.9
         }
       ],
-      "jackpot": "€66,088,013",
-      "nextJackpot": "€75 Million"
+      "jackpot": "€66,088,013"
     }
   }
 }
