@@ -2,12 +2,12 @@ name: Update results and deploy
 
 on:
   schedule:
-    # UK, Irish and European draws end by about 9pm UK time. The late run picks up same-night results;
-    # the morning run catches anything published late and the confirmed prize breakdowns; the midday
-    # run collects the US draws from the night before once New York has published them.
-    - cron: '35 22 * * *'
+    # Every 30 minutes on draw evenings (19:07 to 23:37 UTC), when the UK, Irish and European results come out.
+    - cron: '7,37 19-23 * * *'
+    # Every hour in the afternoon (12:20 to 18:20 UTC), for the US results New York publishes the day after a draw.
+    - cron: '20 12-18 * * *'
+    # Once every morning: a full refresh of every game, which also picks up confirmed prize breakdowns.
     - cron: '15 7 * * *'
-    - cron: '20 12 * * *'
   push:
     branches: [main]
   workflow_dispatch:
@@ -22,12 +22,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  update-and-deploy:
+  update:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      # Scheduled runs redeploy only when the data changed; pushes and manual runs always do.
+      deploy: ${{ steps.commit.outputs.changed == 'true' || github.event_name != 'schedule' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -36,9 +36,14 @@ jobs:
           node-version: 24
 
       - name: Fetch new results
-        run: node scripts/update.mjs
+        # The half-hourly and hourly runs only fetch games with a draw due (--due); the morning run,
+        # pushes and manual runs refresh everything.
+        env:
+          MODE: ${{ github.event_name == 'schedule' && github.event.schedule != '15 7 * * *' && '--due' || '' }}
+        run: node scripts/update.mjs $MODE
 
       - name: Commit changed data
+        id: commit
         run: |
           if [ -n "$(git status --porcelain data)" ]; then
             git config user.name "github-actions[bot]"
@@ -46,15 +51,26 @@ jobs:
             git add data
             git commit -m "Update results $(date -u +%Y-%m-%d)"
             git push || echo "::warning::Could not push the data commit; the next run will retry."
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "No new results."
           fi
 
       - uses: actions/configure-pages@v6
+        if: steps.commit.outputs.changed == 'true' || github.event_name != 'schedule'
 
       - uses: actions/upload-pages-artifact@v5
+        if: steps.commit.outputs.changed == 'true' || github.event_name != 'schedule'
         with:
           path: .
 
+  deploy:
+    needs: update
+    if: needs.update.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v5

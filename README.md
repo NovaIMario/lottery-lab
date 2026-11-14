@@ -24,6 +24,10 @@ For each game it has:
 - **Check your numbers:** choose a line and see every prize it would have won.
 - **Exact odds** for every prize tier, worked out from the number of possible lines. They match each operator's published odds.
 
+**English or Chinese.** The 中文 button at the top switches the whole page to Simplified Chinese, and the
+English button switches it back. The choice is remembered, and links with `?lang=zh` open in Chinese, for
+example https://novaimario.github.io/lottery-lab/?lang=zh. Browsers set to Chinese get Chinese from the start.
+
 ## Why the predictions can't work (and what can help)
 
 Every draw is independent. Any line, however it's chosen, has the same chance of matching, so
@@ -57,17 +61,25 @@ seconds between requests.
 
 ## How the data stays up to date
 
-A GitHub Actions workflow ([.github/workflows/update.yml](.github/workflows/update.yml)) runs
-three times a day: late evening after the UK and European draws, early morning, and at midday
-UK time, by when New York has published the US results from the night before.
+A GitHub Actions workflow ([.github/workflows/update.yml](.github/workflows/update.yml)) checks for
+new results:
+
+- every 30 minutes on draw evenings (19:07 to 23:37 UTC), when the UK, Irish and European results come out
+- every hour in the afternoon (12:20 to 18:20 UTC), for the US results New York publishes the day after a draw
+- once every morning, as a full refresh of every game
+
+The frequent runs pass `--due`, so a game is only fetched once its next draw's results should be out:
+draw days come from the results themselves and each game has a local results time. A game is also
+fetched for two days after a draw while that draw's prize breakdown is missing or provisional. Most
+runs find nothing due and make no requests at all.
 
 1. [scripts/update.mjs](scripts/update.mjs) downloads this year's results for each game, plus the latest draw's prize breakdown.
 2. New draws are merged into `data/<game>.json`. A file is only rewritten when something changed, and a failed request never deletes data.
-3. If anything changed, the workflow commits the data and redeploys the site to GitHub Pages.
+3. If anything changed, the workflow commits the data and redeploys the site to GitHub Pages. Scheduled runs that find nothing new don't redeploy.
 
 To rebuild the full history from scratch, run `node scripts/update.mjs --seed`. It makes about
 90 requests, one every 1.5 seconds. Add `--only=powerball,mega-millions` (game ids as in
-`data/`) to limit a run to some games.
+`data/`) to limit a run to some games, or `--due` to fetch only the games with a draw due.
 
 ## Running locally
 
@@ -90,7 +102,8 @@ style.css             Styles, light and dark themes
 js/app.js             Page sections, the lottery picker and interaction
 js/stats.js           Odds, statistics, picking methods and the backtest
 js/charts.js          SVG charts with tooltips, keyboard support and table views
-js/games.js           Lotteries and game rules: prize tiers, draw days, fixed prizes
+js/games.js           Lotteries and game rules: prize tiers, draw days, fixed prizes, Chinese names
+js/i18n.js            Interface text in English and Simplified Chinese
 js/dom.js             DOM and formatting helpers
 scripts/update.mjs    Data updater (run by the workflow)
 data/*.json           Draw history and latest-draw details

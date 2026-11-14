@@ -1,8 +1,9 @@
-import { GAMES, GAME_ORDER, OPERATORS, operatorOf, tierLabel, scheduleText } from './games.js';
+import { GAMES, GAME_ORDER, OPERATORS, operatorOf } from './games.js';
 import * as S from './stats.js';
 import { columnChart, barChart, chartCard, buildTable, releaseCharts, hideTip } from './charts.js';
+import { T, setLang, localize, initialLang } from './i18n.js';
 import {
-  h, $, fmtInt, fmtNum, fmtPct, fmtMoney, fmtOdds, fmtDate, addDays, weekday, daysBetween, todayUK, plural, balls, store,
+  h, $, fmtInt, fmtNum, fmtPct, fmtMoney, fmtOdds, fmtDate, addDays, weekday, daysBetween, todayUK, balls, store,
 } from './dom.js';
 
 const asc = (a, b) => a - b;
@@ -11,6 +12,7 @@ const sum = (arr) => arr.reduce((a, b) => a + b, 0);
 const state = {
   id: null,
   docs: new Map(),
+  backtests: new Map(), // per game; they don't depend on the language, so switching language reuses them
   latest: null,
   ctx: null,
   window: 'all',
@@ -31,7 +33,7 @@ const sec = {
 
 async function getJson(url) {
   const res = await fetch(url, { cache: 'no-cache' });
-  if (!res.ok) throw new Error(`Couldn't load ${url} (HTTP ${res.status})`);
+  if (!res.ok) throw new Error(T.loadError(url, res.status));
   return res.json();
 }
 
@@ -62,24 +64,24 @@ function nextDrawDate(days, info, lastDate) {
 
 function relDay(date) {
   const n = daysBetween(todayUK(), date);
-  if (n < 0) return '';
-  return n === 0 ? 'Tonight' : n === 1 ? 'Tomorrow' : `In ${n} days`;
+  return n < 0 ? '' : T.relDay(n);
 }
 
+// The game and operator carry their text in the current language (see localize in i18n.js).
 function buildContext(id, doc) {
-  const game = GAMES[id];
-  const op = operatorOf(id);
+  const game = localize(GAMES[id]);
+  const op = localize(operatorOf(id));
   const draws = doc.draws; // newest first, one entry per round
   const lastDate = draws[0].date;
   const info = state.latest?.games?.[id] ?? null;
   const drawDays = drawDaysOf(game, draws);
-  let bt = null;
   return {
     id,
     game,
     op,
     money: (n) => fmtMoney(n, op.currency),
     fmt: doc.format,
+    bonus: T.bonusName(game, doc.format), // { one, many }: "Lucky Star", "Lucky Stars"
     doc,
     draws,
     chrono: [...draws].reverse(),
@@ -92,8 +94,8 @@ function buildContext(id, doc) {
     next: nextDrawDate(drawDays, info, lastDate),
     pickCounts: { main: doc.format.main.count, bonus: game.bonus.picked ? doc.format.bonus.count : 0 },
     get backtest() {
-      bt ??= S.backtest(game, doc.format, this.chrono);
-      return bt;
+      if (!state.backtests.has(id)) state.backtests.set(id, S.backtest(game, doc.format, this.chrono));
+      return state.backtests.get(id);
     },
   };
 }
@@ -118,12 +120,12 @@ function prizeText(ctx, i, info = ctx.info) {
   if (t?.each) return ctx.money(t.each);
   const fixed = ctx.game.fixedPrizes?.[i];
   if (fixed != null) return ctx.money(fixed);
-  return i === 0 ? 'Jackpot' : '—';
+  return i === 0 ? T.jackpot : '—';
 }
 
-// The National Lottery calls a random line a Lucky Dip; most other lotteries call it a Quick Pick.
-const strategyName = (ctx, st) => (st.id === 'random' ? ctx.op.quickPick : st.name);
-const strategyDesc = (ctx, st) => (st.id === 'random' ? `Every number equally likely, like a ${ctx.op.quickPick}.` : st.desc);
+// Name, tag and description of a picking method. The National Lottery calls a random line a Lucky Dip;
+// most other lotteries call it a Quick Pick.
+const strategyText = (ctx, st) => T.strategy(st.id, ctx.op.quickPick, S.WINDOW);
 
 const lineText = (pick) => `${pick.main.join(' ')}${pick.bonus.length ? ` + ${pick.bonus.join(' ')}` : ''}`;
 
@@ -135,15 +137,15 @@ function fact(label, value, sub) {
 
 function jackpotStatus(ctx) {
   const d = ctx.latestDraws[0];
-  if (d.rolldown) return 'Not won, rolled down to the other prizes';
-  if (d.rollover) return 'Not won, rolls over';
+  if (d.rolldown) return T.rolledDown;
+  if (d.rollover) return T.rollsOver;
   const jw = ctx.latestInfo?.jackpotWinners;
   if (jw > 0) {
     const uk = ctx.game.id === 'euromillions' ? tierInfo(ctx, 0, ctx.latestInfo)?.winners ?? 0 : null;
-    return `Won by ${plural(jw, 'ticket')}${uk != null ? (uk ? `, ${fmtInt(uk)} in the UK` : ', none in the UK') : ''}`;
+    return T.wonBy(jw, uk);
   }
-  if (jw === 0) return 'Not won, rolls over';
-  return d.jackpot != null ? 'Won' : '';
+  if (jw === 0) return T.rollsOver;
+  return d.jackpot != null ? T.won : '';
 }
 
 /** Quick facts about one drawn line: total, odd/even split and repeats from the draw before. */
@@ -154,9 +156,9 @@ function drawFacts(ctx) {
   const odd = d.main.filter((n) => n % 2).length;
   const rep = prev ? d.main.filter((n) => prev.main.includes(n)).length : null;
   return h('ul', { class: 'draw-facts' },
-    h('li', null, `Total ${sum(d.main)}`),
-    h('li', null, `${odd} odd, ${d.main.length - odd} even`),
-    rep == null ? null : h('li', null, rep ? `${plural(rep, 'number')} repeated from ${fmtDate(prev.date, 'dm')}` : `No repeats from ${fmtDate(prev.date, 'dm')}`));
+    h('li', null, T.total(sum(d.main))),
+    h('li', null, T.oddEven(odd, d.main.length - odd)),
+    rep == null ? null : h('li', null, T.repeats(rep, fmtDate(prev.date, 'dm'))));
 }
 
 function breakdown(ctx) {
@@ -166,44 +168,44 @@ function breakdown(ctx) {
   const lotto = game.id === 'lotto';
   const rows = game.tiers.map((t, i) => {
     const ti = tierInfo(ctx, i, info);
-    const base = [tierLabel(game, t), prizeText(ctx, i, info)];
+    const base = [T.tier(game, t), prizeText(ctx, i, info)];
     if (lotto) return [...base, fmtInt(ti?.parts[0]?.winners ?? 0), fmtInt(ti?.parts[1]?.winners ?? 0)];
     return [...base, fmtInt(ti?.winners ?? 0)];
   });
-  const head = lotto ? ['Prize tier', 'Each', 'Round 1 winners', 'Round 2 winners']
-    : ['Prize tier', 'Each', game.id === 'euromillions' ? 'UK winners' : 'Winners'];
+  const head = lotto ? [T.prizeTier, T.each, T.roundWinners(1), T.roundWinners(2)]
+    : [T.prizeTier, T.each, game.id === 'euromillions' ? T.ukWinners : T.winners];
   return h('details', { class: 'breakdown', open: window.innerWidth >= 920 },
-    h('summary', null, 'Prize breakdown'),
+    h('summary', null, T.prizeBreakdown),
     buildTable({ head, rows, numeric: lotto ? [1, 2, 3] : [1, 2] }),
-    h('p', { class: 'note' }, `${game.prizeNote}${info.confirmed ? '' : ' Figures are provisional until confirmed.'}`));
+    h('p', { class: 'note' }, `${game.prizeNote}${info.confirmed ? '' : T.provisional}`));
 }
 
 function heroFacts(ctx) {
   const { game, latestDraws, info, next } = ctx;
   const facts = [];
   const d = latestDraws[0];
-  const jackpot = d.jackpot != null ? ctx.money(d.jackpot) : ctx.latestInfo?.jackpot;
+  const jackpot = d.jackpot != null ? ctx.money(d.jackpot) : T.amount(ctx.latestInfo?.jackpot);
   if (jackpot) {
-    facts.push(fact('Jackpot', jackpot, jackpotStatus(ctx)));
+    facts.push(fact(T.jackpot, jackpot, jackpotStatus(ctx)));
   } else if (game.fixedPrizes?.[0] != null) {
     // A fixed top prize: Thunderball and Set For Life pay it to every winner, the Health Lottery shares it.
     const winners = ctx.latestInfo ? tierInfo(ctx, 0, ctx.latestInfo)?.winners ?? 0 : null;
-    facts.push(fact(game.sharedJackpot ? 'Jackpot' : 'Top prize', ctx.money(game.fixedPrizes[0]),
-      winners == null ? game.topPrizeNote ?? '' : winners ? `${plural(winners, 'winner')} this draw` : 'No winner this draw'));
+    facts.push(fact(game.sharedJackpot ? T.jackpot : T.topPrize, ctx.money(game.fixedPrizes[0]),
+      winners == null ? game.topPrizeNote ?? '' : T.winnersThisDraw(winners)));
   } else {
     // No jackpot figure in the data (the US games): the odds are the honest headline.
-    facts.push(fact('Jackpot odds', fmtOdds(S.tierProbabilities(game, ctx.fmt)[0]), 'For each line played'));
+    facts.push(fact(T.jackpotOdds, fmtOdds(S.tierProbabilities(game, ctx.fmt)[0]), T.perLine));
   }
   // US draws happen late evening Eastern time, after midnight in the UK, so say when.
-  facts.push(fact('Next draw', fmtDate(next, 'day'), [relDay(next), game.drawTime].filter(Boolean).join(', ')));
+  facts.push(fact(T.nextDraw, fmtDate(next, 'day'), T.list([relDay(next), game.drawTime].filter(Boolean))));
   // The National Lottery's feed names the draw its estimate is for; draw pages give the one after the latest draw.
-  const estimate = info?.nextJackpot && (info.nextDraw ? info.nextDraw === next : info.date === ctx.lastDate) ? info.nextJackpot : null;
-  if (game.sharedJackpot && estimate) facts.push(fact('Estimated jackpot', estimate, 'Before tickets close'));
+  const estimate = info?.nextJackpot && (info.nextDraw ? info.nextDraw === next : info.date === ctx.lastDate) ? T.amount(info.nextJackpot) : null;
+  if (game.sharedJackpot && estimate) facts.push(fact(T.estimatedJackpot, estimate, T.beforeClose));
   return facts;
 }
 
 function renderHero(ctx) {
-  const { game, fmt, latestDraws } = ctx;
+  const { game, latestDraws } = ctx;
   const two = latestDraws.length > 1;
   const facts = heroFacts(ctx);
 
@@ -211,22 +213,22 @@ function renderHero(ctx) {
   const prev = dates.map((date) => h('li', null,
     h('span', { class: 'prev-date' }, fmtDate(date)),
     h('span', { class: 'prev-balls' }, ctx.draws.filter((d) => d.date === date)
-      .map((d) => balls(d.main, d.bonus, { size: 'sm', bonusName: fmt.bonus.name })))));
+      .map((d) => balls(d.main, d.bonus, { size: 'sm', bonusName: ctx.bonus.many })))));
 
   sec.hero.replaceChildren(
     h('div', { class: 'hero-main' },
-      h('p', { class: 'eyebrow' }, `${game.name} · Latest result${ctx.latestInfo?.drawNumber ? ` · Draw ${ctx.latestInfo.drawNumber}` : ''}`),
+      h('p', { class: 'eyebrow' }, T.eyebrow(game.name, ctx.latestInfo?.drawNumber)),
       h('h1', null, fmtDate(ctx.lastDate, 'long')),
       h('div', { class: 'hero-balls' }, latestDraws.map((d) => h('div', { class: 'round' },
-        two ? h('span', { class: 'round-label' }, `Round ${d.round}`) : null,
-        balls(d.main, d.bonus, { size: 'xl', bonusName: fmt.bonus.name })))),
+        two ? h('span', { class: 'round-label' }, T.round(d.round)) : null,
+        balls(d.main, d.bonus, { size: 'xl', bonusName: ctx.bonus.many })))),
       drawFacts(ctx),
       h('dl', { class: 'facts' }, facts),
       breakdown(ctx)),
-    h('aside', { class: 'hero-prev', 'aria-label': 'Previous draws' },
-      h('h2', null, 'Previous draws'),
+    h('aside', { class: 'hero-prev', 'aria-label': T.previousDraws },
+      h('h2', null, T.previousDraws),
       h('ol', null, prev),
-      h('a', { class: 'link', href: '#history' }, 'All results →')));
+      h('a', { class: 'link', href: '#history' }, T.allResults)));
 }
 
 // ---------------------------------------------------------------- picks
@@ -234,30 +236,28 @@ function renderHero(ctx) {
 async function copyText(text, btn) {
   try {
     await navigator.clipboard.writeText(text);
-    btn.textContent = 'Copied';
+    btn.textContent = T.copied;
   } catch {
     btn.textContent = text;
   }
-  setTimeout(() => { btn.textContent = 'Copy'; }, 1600);
+  setTimeout(() => { btn.textContent = T.copy; }, 1600);
 }
 
 function pickCard(ctx, st, pick) {
   const { game, fmt } = ctx;
   const bt = ctx.backtest;
   const r = bt.results.find((x) => x.id === st.id);
-  let desc = strategyDesc(ctx, st);
-  if (st.id === 'unpopular') {
-    desc += game.sharedJackpot ? ' It only matters if you win a shared prize such as the jackpot.'
-      : ` ${game.name} prizes are fixed, so here it makes no difference.`;
-  }
+  const text = strategyText(ctx, st);
+  let { desc } = text;
+  if (st.id === 'unpopular') desc += game.sharedJackpot ? T.unpopularShared : T.unpopularFixed(game.name);
   const card = h('article', { class: 'card pick', 'data-strategy': st.id },
-    h('header', null, h('h3', null, strategyName(ctx, st)), h('span', { class: 'chip' }, st.tag)),
-    balls(pick.main, pick.bonus, { size: 'md', bonusName: fmt.bonus.name }),
+    h('header', null, h('h3', null, text.name), h('span', { class: 'chip' }, text.tag)),
+    balls(pick.main, pick.bonus, { size: 'md', bonusName: ctx.bonus.many }),
     h('p', { class: 'desc' }, desc),
-    h('p', { class: 'bt' }, 'Backtest: ', h('strong', null, fmtNum(r.avg)), ` numbers matched per draw. Chance alone: ${fmtNum(bt.expected.mean)}.`),
+    h('p', { class: 'bt' }, T.btLine(fmtNum(r.avg), fmtNum(bt.expected.mean))),
     h('div', { class: 'actions' },
-      h('button', { class: 'btn small', type: 'button', onclick: (e) => copyText(lineText(pick), e.currentTarget) }, 'Copy'),
-      h('button', { class: 'btn small', type: 'button', onclick: () => loadIntoChecker(pick) }, 'Check past draws'),
+      h('button', { class: 'btn small', type: 'button', onclick: (e) => copyText(lineText(pick), e.currentTarget) }, T.copy),
+      h('button', { class: 'btn small', type: 'button', onclick: () => loadIntoChecker(pick) }, T.checkPast),
       st.random ? h('button', {
         class: 'btn small ghost reroll',
         type: 'button',
@@ -268,7 +268,7 @@ function pickCard(ctx, st, pick) {
           card.replaceWith(fresh);
           $('.reroll', fresh)?.focus();
         },
-      }, 'Re-roll') : null));
+      }, T.reroll) : null));
   return card;
 }
 
@@ -278,33 +278,29 @@ function renderPicks(ctx) {
   const shared = game.sharedJackpot;
   sec.picks.replaceChildren(
     h('div', { class: 'section-head' },
-      h('h2', null, `Picks for ${fmtDate(ctx.next, 'day')}`),
-      h('p', { class: 'lede' }, `Six ways to choose a line for the next ${game.name} draw. Every draw is random, so no method can make a line more likely to win. Below, each method is tested against ${fmtInt(ctx.backtest.tested)} past draws to show it.`)),
+      h('h2', null, T.picksTitle(fmtDate(ctx.next, 'day'))),
+      h('p', { class: 'lede' }, T.picksLede(game.name, fmtInt(ctx.backtest.tested)))),
     h('div', { class: 'pick-grid' }, S.STRATEGIES.map((st) => pickCard(ctx, st, picks[st.id]))),
     h('aside', { class: 'callout' },
-      h('h3', null, shared ? 'The one thing that does help' : 'Is there any edge?'),
-      h('p', null, shared
-        ? `Numbers other players avoid can't raise your chance of winning, but they can raise what you'd keep. ${game.name} jackpots are split between everyone who matches, and birthdays (1 to 31), 7 and tidy patterns are the most popular choices. A line of higher, irregular numbers is less likely to be shared.`
-        : `No. ${game.name} prizes are fixed amounts that aren't split between winners, so every line has exactly the same odds and the same prizes.`)));
+      h('h3', null, T.edgeTitle(shared)),
+      h('p', null, shared ? T.edgeShared(game.name) : T.edgeFixed(game.name))));
 }
 
 // ---------------------------------------------------------------- backtest
 
 function bestText(ctx, best) {
   if (!best) return '—';
-  const label = best.tier >= 0 ? tierLabel(ctx.game, ctx.game.tiers[best.tier]) : `Match ${best.m}`;
-  return `${label}, ${fmtDate(best.date)}`;
+  const label = best.tier >= 0 ? T.tier(ctx.game, ctx.game.tiers[best.tier]) : T.match(best.m);
+  return T.best(label, fmtDate(best.date));
 }
 
 function renderBacktest(ctx) {
   releaseCharts(sec.backtest);
   const bt = ctx.backtest;
   const E = bt.expected;
-  const name = Object.fromEntries(S.STRATEGIES.map((st) => [st.id, strategyName(ctx, st)]));
+  const name = Object.fromEntries(S.STRATEGIES.map((st) => [st.id, strategyText(ctx, st).name]));
   const outside = bt.results.filter((r) => r.avg < E.lo || r.avg > E.hi).length;
-  const verdict = outside === 0
-    ? `All six methods landed inside the range luck alone produces. None of them has an edge.`
-    : `${outside} of six landed just outside the luck range. With six methods tested, that happens by chance about a quarter of the time, so it isn't evidence of an edge.`;
+  const verdict = outside === 0 ? T.verdictNone : T.verdictSome(outside);
   const items = bt.results.map((r) => ({
     label: name[r.id],
     value: r.avg,
@@ -312,34 +308,34 @@ function renderBacktest(ctx) {
     tip: () => ({
       title: name[r.id],
       rows: [
-        { value: fmtNum(r.avg, 3), label: 'numbers matched per draw', key: 'bar' },
-        { value: fmtPct(r.prizeRate), label: 'of draws won a prize' },
-        { value: fmtNum(E.mean, 3), label: 'expected by chance', key: 'line' },
+        { value: fmtNum(r.avg, 3), label: T.tipMatched, key: 'bar' },
+        { value: fmtPct(r.prizeRate), label: T.tipPrize },
+        { value: fmtNum(E.mean, 3), label: T.tipChance, key: 'line' },
       ],
     }),
   }));
   sec.backtest.replaceChildren(
     h('div', { class: 'section-head' },
-      h('h2', null, 'Did any method beat chance?'),
-      h('p', { class: 'lede' }, `Before each of ${fmtInt(bt.tested)} draws from ${fmtDate(bt.from)} to ${fmtDate(bt.to)}, every method picked a line using only the results known at the time. Each line was then checked against the real draw. ${verdict}`)),
+      h('h2', null, T.btTitle),
+      h('p', { class: 'lede' }, T.btLede(fmtInt(bt.tested), fmtDate(bt.from), fmtDate(bt.to), verdict))),
     chartCard({
-      title: 'Main numbers matched per draw',
-      subtitle: `If a method had an edge, its bar would end clearly past the shaded band.`,
+      title: T.btChart,
+      subtitle: T.btSub,
       legend: [
-        { label: 'Average for the method', key: 'bar' },
-        { label: `Expected by chance (${fmtNum(E.mean)})`, key: 'line' },
-        { label: '95% range for luck alone', key: 'band' },
+        { label: T.btAverage, key: 'bar' },
+        { label: T.btExpected(fmtNum(E.mean)), key: 'line' },
+        { label: T.btBand, key: 'band' },
       ],
       draw: (host) => barChart(host, items, {
         ref: { value: E.mean, lo: E.lo, hi: E.hi },
-        aria: `Bar chart of the average main numbers matched per draw by six picking methods. All are close to the chance level of ${fmtNum(E.mean)}.`,
+        aria: T.btAria(fmtNum(E.mean)),
       }),
       table: () => ({
-        head: ['Method', 'Draws', 'Matched per draw', 'Won a prize', 'Best line'],
+        head: T.btHead,
         numeric: [1, 2, 3],
         rows: bt.results.map((r) => [name[r.id], fmtInt(r.n), fmtNum(r.avg, 3), fmtPct(r.prizeRate), bestText(ctx, r.best)]),
       }),
-      note: `However it's chosen, a line matches ${fmtNum(E.mean, 3)} main numbers per draw on average and wins a prize in ${fmtPct(E.pAny)} of draws.`,
+      note: T.btNote(fmtNum(E.mean, 3), fmtPct(E.pAny)),
       wide: true,
     }));
 }
@@ -347,9 +343,9 @@ function renderBacktest(ctx) {
 // ---------------------------------------------------------------- statistics
 
 const WINDOWS = [
-  { id: 'all', label: (ctx) => `All since ${fmtDate(ctx.fmt.since, 'month')}` },
-  { id: '1y', label: () => 'Last 12 months' },
-  { id: '100', label: () => 'Last 100 draws' },
+  { id: 'all', label: (ctx) => T.allSince(fmtDate(ctx.fmt.since, 'month')) },
+  { id: '1y', label: () => T.last12 },
+  { id: '100', label: () => T.last100 },
 ];
 
 function windowDraws(ctx) {
@@ -374,36 +370,36 @@ function freqCard(ctx, W, key) {
   const hi = mean + 1.96 * sd;
   const nums = Array.from({ length: N }, (_, i) => i + 1);
   const outside = nums.filter((x) => count[x] < lo || count[x] > hi).length;
-  const noun = isMain ? 'Number' : spec.name.replace(/s$/, '');
-  const lastSeen = (x) => (since[x] < 0 ? 'not in this period' : since[x] === 0 ? 'latest draw' : `${plural(since[x], 'draw')} ago`);
+  const noun = isMain ? T.number : ctx.bonus.one;
+  const lastSeen = (x) => (since[x] < 0 ? T.notInPeriod : since[x] === 0 ? T.latestDraw : T.drawsAgo(since[x]));
   const items = nums.map((x) => ({
     label: String(x),
     value: count[x],
     tip: () => ({
       title: `${noun} ${x}`,
       rows: [
-        { value: plural(count[x], 'time'), label: `${fmtPct(count[x] / n)} of draws`, key: 'bar' },
-        { value: fmtNum(mean, 1), label: 'expected', key: 'line' },
-        { value: lastSeen(x), label: 'last drawn' },
+        { value: T.times(count[x]), label: T.shareOfDraws(fmtPct(count[x] / n)), key: 'bar' },
+        { value: fmtNum(mean, 1), label: T.expected, key: 'line' },
+        { value: lastSeen(x), label: T.lastDrawn },
       ],
     }),
   }));
   return chartCard({
-    title: isMain ? 'How often each number comes up' : `How often each ${noun} comes up`,
-    subtitle: `${outside} of ${N} fall outside the shaded band. Chance alone would put about ${Math.max(1, Math.round(N * 0.05))} there.`,
+    title: T.freqTitle(noun, isMain),
+    subtitle: T.freqSub(outside, N, Math.max(1, Math.round(N * 0.05))),
     legend: [
-      { label: 'Times drawn', key: 'bar' },
-      { label: `Expected (${fmtNum(mean, 1)})`, key: 'line' },
-      { label: '95% range for chance', key: 'band' },
+      { label: T.timesDrawn, key: 'bar' },
+      { label: T.expectedX(fmtNum(mean, 1)), key: 'line' },
+      { label: T.chanceBand, key: 'band' },
     ],
     draw: (host) => columnChart(host, items, {
       height: isMain ? 240 : 250,
       ref: { value: mean, lo, hi },
       extremes: true,
-      aria: `Column chart of how many times each ${noun.toLowerCase()} from 1 to ${N} was drawn in ${plural(n, 'draw')}. Use the arrow keys to read each value.`,
+      aria: T.freqAria(noun, N, n),
     }),
     table: () => ({
-      head: [noun, 'Times drawn', 'Share of draws', 'Last drawn'],
+      head: T.freqHead(noun),
       numeric: [0, 1, 2],
       rows: nums.map((x) => [String(x), fmtInt(count[x]), fmtPct(count[x] / n), lastSeen(x)]),
     }),
@@ -418,26 +414,26 @@ function overdueCard(ctx, W) {
   const gapText = (x) => `${fmtInt(gap(x))}${since[x] < 0 ? '+' : ''}`;
   const nums = Array.from({ length: N }, (_, i) => i + 1).sort((a, b) => gap(b) - gap(a) || a - b);
   const avgGap = N / K;
-  const lastDate = (x) => (since[x] < 0 ? `before ${fmtDate(W[W.length - 1].date)}` : fmtDate(W[since[x]].date));
+  const lastDate = (x) => (since[x] < 0 ? T.before(fmtDate(W[W.length - 1].date)) : fmtDate(W[since[x]].date));
   const items = nums.slice(0, 10).map((x) => ({
-    label: `Number ${x}`,
+    label: T.numberX(x),
     value: gap(x),
     valueLabel: gapText(x),
     tip: () => ({
-      title: `Number ${x}`,
+      title: T.numberX(x),
       rows: [
-        { value: `${gapText(x)} draws`, label: 'since last drawn', key: 'bar' },
-        { value: lastDate(x), label: 'last drawn' },
-        { value: fmtNum(avgGap, 1), label: 'average gap', key: 'line' },
+        { value: T.gapDraws(gapText(x)), label: T.sinceLast, key: 'bar' },
+        { value: lastDate(x), label: T.lastDrawn },
+        { value: fmtNum(avgGap, 1), label: T.avgGap, key: 'line' },
       ],
     }),
   }));
   return chartCard({
-    title: 'Numbers waiting longest',
-    subtitle: `Draws since each number last came up. A number turns up every ${fmtNum(avgGap, 1)} draws on average, and a long wait doesn't make it due.`,
-    legend: [{ label: 'Draws since last drawn', key: 'bar' }, { label: `Average gap (${fmtNum(avgGap, 1)})`, key: 'line' }],
-    draw: (host) => barChart(host, items, { ref: { value: avgGap }, aria: 'Bar chart of the ten numbers with the longest wait since they were last drawn.' }),
-    table: () => ({ head: ['Number', 'Draws since drawn', 'Last drawn'], numeric: [0, 1], rows: nums.map((x) => [String(x), gapText(x), lastDate(x)]) }),
+    title: T.overdueTitle,
+    subtitle: T.overdueSub(fmtNum(avgGap, 1)),
+    legend: [{ label: T.overdueKey, key: 'bar' }, { label: T.avgGapX(fmtNum(avgGap, 1)), key: 'line' }],
+    draw: (host) => barChart(host, items, { ref: { value: avgGap }, aria: T.overdueAria }),
+    table: () => ({ head: T.overdueHead, numeric: [0, 1], rows: nums.map((x) => [String(x), gapText(x), lastDate(x)]) }),
   });
 }
 
@@ -454,32 +450,32 @@ function sumCard(ctx, W) {
   const at = (total) => Math.max(0, Math.min(bins.length - 1, Math.floor((total - lo) / w)));
   for (const d of W) bins[at(sum(d.main))].obs++;
   dist.forEach((pr, total) => { if (pr) bins[at(total)].exp += pr * W.length; });
-  const range = (b, i) => (i === 0 ? `${b.to} or less` : i === bins.length - 1 ? `${b.from} or more` : `${b.from}–${b.to}`);
+  const range = (b, i) => (i === 0 ? T.orLess(b.to) : i === bins.length - 1 ? T.orMore(b.from) : `${b.from}–${b.to}`);
   const rules = S.shapeRules(ctx.fmt);
   const items = bins.map((b, i) => ({
     label: String(b.from),
     value: b.obs,
     marker: b.exp,
     tip: () => ({
-      title: `Total ${range(b, i)}`,
+      title: T.totalOf(range(b, i)),
       rows: [
-        { value: plural(b.obs, 'draw'), label: fmtPct(b.obs / W.length), key: 'bar' },
-        { value: fmtNum(b.exp, 1), label: 'expected if random', key: 'dot' },
+        { value: T.draws(b.obs), label: fmtPct(b.obs / W.length), key: 'bar' },
+        { value: fmtNum(b.exp, 1), label: T.ifRandom, key: 'dot' },
       ],
     }),
   }));
   return chartCard({
-    title: 'Total of the main numbers',
-    subtitle: `Half of all possible lines add up to between ${rules.sumLo} and ${rules.sumHi}, so most draws do too.`,
-    legend: [{ label: 'Draws', key: 'bar' }, { label: 'Expected if random', key: 'dot' }],
+    title: T.sumTitle,
+    subtitle: T.sumSub(rules.sumLo, rules.sumHi),
+    legend: [{ label: T.drawsKey, key: 'bar' }, { label: T.ifRandomKey, key: 'dot' }],
     draw: (host) => columnChart(host, items, {
       height: 250,
       gap: 2,
       xLabel: (i, every) => (i % Math.max(2, every) === 0 ? String(bins[i].from) : null),
-      aria: 'Histogram of the total of the main numbers in each draw, with the counts expected from random draws.',
+      aria: T.sumAria,
     }),
     table: () => ({
-      head: ['Total', 'Draws', 'Expected'],
+      head: T.sumHead,
       numeric: [1, 2],
       rows: bins.map((b, i) => [range(b, i), fmtInt(b.obs), fmtNum(b.exp, 1)]),
     }),
@@ -498,20 +494,20 @@ function oddCard(ctx, W) {
       value: o,
       marker: exp,
       tip: () => ({
-        title: `${j} odd, ${K - j} even`,
+        title: T.oddSplit(j, K - j),
         rows: [
-          { value: plural(o, 'draw'), label: fmtPct(o / W.length), key: 'bar' },
-          { value: fmtNum(exp, 1), label: 'expected if random', key: 'dot' },
+          { value: T.draws(o), label: fmtPct(o / W.length), key: 'bar' },
+          { value: fmtNum(exp, 1), label: T.ifRandom, key: 'dot' },
         ],
       }),
     };
   });
   return chartCard({
-    title: 'Odd and even numbers',
-    subtitle: 'How the main numbers in each draw split between odd and even (odd–even).',
-    legend: [{ label: 'Draws', key: 'bar' }, { label: 'Expected if random', key: 'dot' }],
-    draw: (host) => columnChart(host, items, { height: 250, aria: 'Column chart of how many odd and even numbers each draw had, with the counts expected from random draws.' }),
-    table: () => ({ head: ['Odd–even', 'Draws', 'Expected'], numeric: [1, 2], rows: items.map((it) => [it.label, fmtInt(it.value), fmtNum(it.marker, 1)]) }),
+    title: T.oddTitle,
+    subtitle: T.oddSub,
+    legend: [{ label: T.drawsKey, key: 'bar' }, { label: T.ifRandomKey, key: 'dot' }],
+    draw: (host) => columnChart(host, items, { height: 250, aria: T.oddAria }),
+    table: () => ({ head: T.oddHead, numeric: [1, 2], rows: items.map((it) => [it.label, fmtInt(it.value), fmtNum(it.marker, 1)]) }),
   });
 }
 
@@ -531,20 +527,20 @@ function repeatCard(ctx, W) {
     value: o,
     marker: exp[j],
     tip: () => ({
-      title: j === 1 ? '1 number repeated' : `${j} numbers repeated`,
+      title: T.repeated(j),
       rows: [
-        { value: plural(o, 'draw'), label: n ? fmtPct(o / n) : '', key: 'bar' },
-        { value: fmtNum(exp[j], 1), label: 'expected if random', key: 'dot' },
+        { value: T.draws(o), label: n ? fmtPct(o / n) : '', key: 'bar' },
+        { value: fmtNum(exp[j], 1), label: T.ifRandom, key: 'dot' },
       ],
     }),
   }));
   const atLeastOne = 1 - S.hyper(N, K, K, 0);
   return chartCard({
-    title: 'Numbers repeated from the draw before',
-    subtitle: `How many main numbers each draw shared with the one before it. By chance, ${fmtPct(atLeastOne, 0)} of draws repeat at least one.`,
-    legend: [{ label: 'Draws', key: 'bar' }, { label: 'Expected if random', key: 'dot' }],
-    draw: (host) => columnChart(host, items, { height: 250, aria: 'Column chart of how many numbers each draw repeated from the previous draw, with the counts expected from random draws.' }),
-    table: () => ({ head: ['Repeated', 'Draws', 'Expected'], numeric: [0, 1, 2], rows: items.map((it, j) => [String(j), fmtInt(it.value), fmtNum(exp[j], 1)]) }),
+    title: T.repeatTitle,
+    subtitle: T.repeatSub(fmtPct(atLeastOne, 0)),
+    legend: [{ label: T.drawsKey, key: 'bar' }, { label: T.ifRandomKey, key: 'dot' }],
+    draw: (host) => columnChart(host, items, { height: 250, aria: T.repeatAria }),
+    table: () => ({ head: T.repeatHead, numeric: [0, 1, 2], rows: items.map((it, j) => [String(j), fmtInt(it.value), fmtNum(exp[j], 1)]) }),
   });
 }
 
@@ -553,23 +549,23 @@ function pairsCard(ctx, W) {
   const top = S.topPairs(W, 10);
   const exp = (W.length * S.C(K, 2)) / S.C(N, 2);
   const items = top.map((pr) => ({
-    label: `${pr.a} and ${pr.b}`,
+    label: T.pair(pr.a, pr.b),
     value: pr.count,
     valueLabel: fmtInt(pr.count),
     tip: () => ({
-      title: `${pr.a} and ${pr.b}`,
+      title: T.pair(pr.a, pr.b),
       rows: [
-        { value: plural(pr.count, 'time'), label: 'drawn together', key: 'bar' },
-        { value: fmtNum(exp, 1), label: 'expected for any pair', key: 'line' },
+        { value: T.times(pr.count), label: T.together, key: 'bar' },
+        { value: fmtNum(exp, 1), label: T.anyPair, key: 'line' },
       ],
     }),
   }));
   return chartCard({
-    title: 'Pairs drawn together most often',
-    subtitle: `With ${fmtInt(S.C(N, 2))} possible pairs, a few always stand out by chance.`,
-    legend: [{ label: 'Times drawn together', key: 'bar' }, { label: `Expected for any pair (${fmtNum(exp, 1)})`, key: 'line' }],
-    draw: (host) => barChart(host, items, { ref: { value: exp }, aria: 'Bar chart of the ten pairs of numbers drawn together most often.' }),
-    table: () => ({ head: ['Pair', 'Times drawn together'], numeric: [1], rows: items.map((it) => [it.label, fmtInt(it.value)]) }),
+    title: T.pairsTitle,
+    subtitle: T.pairsSub(fmtInt(S.C(N, 2))),
+    legend: [{ label: T.togetherKey, key: 'bar' }, { label: T.anyPairX(fmtNum(exp, 1)), key: 'line' }],
+    draw: (host) => barChart(host, items, { ref: { value: exp }, aria: T.pairsAria }),
+    table: () => ({ head: T.pairsHead, numeric: [1], rows: items.map((it) => [it.label, fmtInt(it.value)]) }),
   });
 }
 
@@ -578,7 +574,7 @@ function renderStats(ctx) {
   const W = windowDraws(ctx);
   const focused = document.activeElement?.dataset?.window;
   const filter = h('div', { class: 'filter-row' },
-    h('div', { class: 'seg-group', role: 'group', 'aria-label': 'Draws to include' },
+    h('div', { class: 'seg-group', role: 'group', 'aria-label': T.windowGroup },
       WINDOWS.map((w) => h('button', {
         class: 'seg',
         type: 'button',
@@ -586,11 +582,11 @@ function renderStats(ctx) {
         'aria-pressed': String(state.window === w.id),
         onclick: () => { state.window = w.id; renderStats(ctx); },
       }, w.label(ctx)))),
-    h('span', { class: 'filter-note' }, `${plural(W.length, 'draw')}, ${fmtDate(W[W.length - 1].date)} to ${fmtDate(W[0].date)}${ctx.game.twoRoundsSince ? ' (each Lotto round counts as a draw)' : ''}`));
+    h('span', { class: 'filter-note' }, T.windowNote(W.length, fmtDate(W[W.length - 1].date), fmtDate(W[0].date), Boolean(ctx.game.twoRoundsSince))));
   sec.stats.replaceChildren(
     h('div', { class: 'section-head' },
-      h('h2', null, 'Number statistics'),
-      h('p', { class: 'lede' }, 'Patterns in past results, each shown against what pure chance would produce. They describe the past; the balls have no memory.')),
+      h('h2', null, T.statsTitle),
+      h('p', { class: 'lede' }, T.statsLede)),
     filter,
     h('div', { class: 'chart-grid' },
       freqCard(ctx, W, 'main'),
@@ -633,12 +629,7 @@ function checkerSummary(ctx) {
   const { game, fmt } = ctx;
   const { main: K, bonus: Kb } = ctx.pickCounts;
   if (!checkerReady(ctx)) {
-    const needM = K - state.check.main.size;
-    const needB = Kb - state.check.bonus.size;
-    const parts = [];
-    if (needM > 0) parts.push(plural(needM, 'more number'));
-    if (needB > 0) parts.push(`${needB} more ${needB === 1 ? fmt.bonus.name.replace(/s$/, '') : fmt.bonus.name}`);
-    return h('p', { class: 'muted' }, `Choose ${parts.join(' and ')}.`);
+    return h('p', { class: 'muted' }, T.chooseMore(K - state.check.main.size, Kb - state.check.bonus.size, ctx.bonus));
   }
   const pick = checkerPick();
   const counts = new Array(game.tiers.length).fill(0);
@@ -654,31 +645,32 @@ function checkerSummary(ctx) {
   }
   const n = ctx.draws.length;
   const pAny = sum(S.tierProbabilities(game, fmt));
-  const rows = game.tiers.map((t, i) => [tierLabel(game, t), fmtInt(counts[i]), last[i] ? fmtDate(last[i]) : '—']).filter((_, i) => counts[i] > 0);
+  const rows = game.tiers.map((t, i) => [T.tier(game, t), fmtInt(counts[i]), last[i] ? fmtDate(last[i]) : '—']).filter((_, i) => counts[i] > 0);
   return h('div', null,
     h('p', { class: 'check-summary' },
-      h('strong', null, prizes ? plural(prizes, 'prize') : 'No prizes'),
-      ` in ${plural(n, 'draw')} since ${fmtDate(fmt.since)}: ${fmtPct(prizes / n)} of draws. Chance alone: ${fmtPct(pAny)}.`),
-    rows.length ? buildTable({ head: ['Prize tier', 'Times', 'Most recent'], rows, numeric: [1] }) : null);
+      h('strong', null, T.prizesWon(prizes)),
+      T.prizesIn(n, fmtDate(fmt.since), fmtPct(prizes / n), fmtPct(pAny))),
+    rows.length ? buildTable({ head: T.checkHead, rows, numeric: [1] }) : null);
 }
 
-function updateChecker(ctx) {
+// A new line shows the history from the top again; redrawing the same line (a language switch) doesn't.
+function updateChecker(ctx, resetHistory = true) {
   for (const btn of sec.check.querySelectorAll('.num-btn')) {
     btn.setAttribute('aria-pressed', String(state.check[btn.dataset.kind].has(Number(btn.dataset.n))));
   }
   const ready = checkerReady(ctx);
   $('.check-line', sec.check)?.replaceChildren(ready || state.check.main.size || state.check.bonus.size
-    ? balls([...state.check.main].sort(asc), [...state.check.bonus].sort(asc), { size: 'md', bonusName: ctx.fmt.bonus.name })
-    : h('span', { class: 'muted' }, 'No numbers chosen'));
+    ? balls([...state.check.main].sort(asc), [...state.check.bonus].sort(asc), { size: 'md', bonusName: ctx.bonus.many })
+    : h('span', { class: 'muted' }, T.noNumbers));
   $('.check-result', sec.check)?.replaceChildren(checkerSummary(ctx));
-  state.history.limit = 25;
+  if (resetHistory) state.history.limit = 25;
   renderHistory(ctx);
 }
 
-function renderCheck(ctx) {
+function renderCheck(ctx, resetHistory = true) {
   const { fmt, game } = ctx;
   const { main: K, bonus: Kb } = ctx.pickCounts;
-  const grid = (kind, max) => h('div', { class: `num-grid ${kind}`, role: 'group', 'aria-label': kind === 'main' ? 'Main numbers' : fmt.bonus.name },
+  const grid = (kind, max) => h('div', { class: `num-grid ${kind}`, role: 'group', 'aria-label': kind === 'main' ? T.mainNumbers : ctx.bonus.many },
     Array.from({ length: max }, (_, i) => h('button', {
       class: `num-btn ${kind}`,
       type: 'button',
@@ -687,15 +679,14 @@ function renderCheck(ctx) {
       'aria-pressed': 'false',
       onclick: () => toggleNumber(ctx, kind, i + 1),
     }, String(i + 1))));
-  const what = `${K} numbers${Kb ? ` and ${Kb === 1 ? `a ${fmt.bonus.name.replace(/s$/, '')}` : `${Kb} ${fmt.bonus.name}`}` : ''}`;
   sec.check.replaceChildren(
     h('div', { class: 'section-head' },
-      h('h2', null, 'Check your numbers'),
-      h('p', { class: 'lede' }, `Choose ${what} to see how that line would have done in every draw since ${fmtDate(fmt.since)}.`)),
+      h('h2', null, T.checkTitle),
+      h('p', { class: 'lede' }, T.checkLede(T.lineOf(K, Kb, ctx.bonus), fmtDate(fmt.since)))),
     h('div', { class: 'card checker' },
       h('div', { class: 'checker-grids' },
-        h('div', null, h('h3', { class: 'grid-title' }, `Main numbers (choose ${K})`), grid('main', fmt.main.max)),
-        Kb ? h('div', null, h('h3', { class: 'grid-title' }, `${fmt.bonus.name} (choose ${Kb})`), grid('bonus', fmt.bonus.max)) : null),
+        h('div', null, h('h3', { class: 'grid-title' }, T.chooseMain(K)), grid('main', fmt.main.max)),
+        Kb ? h('div', null, h('h3', { class: 'grid-title' }, T.chooseBonus(ctx.bonus.many, Kb)), grid('bonus', fmt.bonus.max)) : null),
       h('div', { class: 'checker-side' },
         h('div', { class: 'check-line', 'aria-live': 'polite' }),
         h('div', { class: 'actions' },
@@ -707,15 +698,15 @@ function renderCheck(ctx) {
               loadIntoChecker(S.makePick('random', game, fmt, S.newState(fmt), rand));
             },
           }, ctx.op.quickPick),
-          h('button', { class: 'btn small ghost', type: 'button', onclick: () => { state.check = { main: new Set(), bonus: new Set() }; updateChecker(ctx); } }, 'Clear')),
+          h('button', { class: 'btn small ghost', type: 'button', onclick: () => { state.check = { main: new Set(), bonus: new Set() }; updateChecker(ctx); } }, T.clear)),
         h('div', { class: 'check-result', 'aria-live': 'polite' }))));
-  updateChecker(ctx);
+  updateChecker(ctx, resetHistory);
 }
 
 function jackpotCell(ctx, d) {
   if (d.jackpot == null) return '—';
   return h('span', { class: 'jackpot' }, ctx.money(d.jackpot),
-    d.rolldown ? h('span', { class: 'tag' }, 'Rolled down') : d.rollover ? h('span', { class: 'tag' }, 'Rolled over') : h('span', { class: 'tag won' }, 'Won'));
+    d.rolldown ? h('span', { class: 'tag' }, T.rolledDownTag) : d.rollover ? h('span', { class: 'tag' }, T.rolledOverTag) : h('span', { class: 'tag won' }, T.wonTag));
 }
 
 function renderHistory(ctx) {
@@ -739,49 +730,49 @@ function renderHistory(ctx) {
   }
   const shown = rows.slice(0, state.history.limit);
   const showJackpot = ctx.hasJackpots;
-  const matchText = (c) => (c.tier >= 0 ? tierLabel(game, game.tiers[c.tier]) : `${c.m} matched`);
+  const matchText = (c) => (c.tier >= 0 ? T.tier(game, game.tiers[c.tier]) : T.matched(c.m));
 
   const table = h('div', { class: 'table-scroll' }, h('table', { class: 'data history' },
     h('thead', null, h('tr', null,
-      h('th', { scope: 'col' }, 'Draw date'),
-      h('th', { scope: 'col' }, 'Winning numbers'),
-      showJackpot ? h('th', { scope: 'col', class: 'num' }, 'Jackpot') : null,
-      checking ? h('th', { scope: 'col' }, 'Your line') : null)),
+      h('th', { scope: 'col' }, T.drawDate),
+      h('th', { scope: 'col' }, T.winningNumbers),
+      showJackpot ? h('th', { scope: 'col', class: 'num' }, T.jackpot) : null,
+      checking ? h('th', { scope: 'col' }, T.yourLine) : null)),
     h('tbody', null, shown.map((g) => h('tr', null,
       h('td', { class: 'date-cell c-date' }, h('span', { class: 'dow' }, fmtDate(g.date, 'weekday')), h('span', null, fmtDate(g.date))),
       h('td', { class: 'c-nums' }, g.rounds.map((d) => h('div', { class: 'round-line' },
-        g.rounds.length > 1 ? h('span', { class: 'round-label' }, `R${d.round}`) : null,
-        balls(d.main, d.bonus, { size: 'sm', hits, bonusName: fmt.bonus.name })))),
+        g.rounds.length > 1 ? h('span', { class: 'round-label' }, T.roundTag(d.round)) : null,
+        balls(d.main, d.bonus, { size: 'sm', hits, bonusName: ctx.bonus.many })))),
       showJackpot ? h('td', { class: 'num c-jack' }, jackpotCell(ctx, g.rounds[0])) : null,
       checking ? h('td', { class: 'c-line' }, results.get(g).map((c, i) => h('div', { class: `match${c.tier >= 0 ? ' win' : ''}` },
-        g.rounds.length > 1 ? `R${g.rounds[i].round}: ` : '', matchText(c)))) : null)))));
+        g.rounds.length > 1 ? T.roundPrefix(g.rounds[i].round) : '', matchText(c)))) : null)))));
 
   const yearSelect = h('select', {
-    'aria-label': 'Year',
+    'aria-label': T.year,
     onchange: (e) => { state.history.year = e.target.value; state.history.limit = 25; renderHistory(ctx); $('select', sec.history)?.focus(); },
-  }, h('option', { value: 'all' }, 'All years'), years.map((y) => h('option', { value: y, selected: state.history.year === y }, y)));
+  }, h('option', { value: 'all' }, T.allYears), years.map((y) => h('option', { value: y, selected: state.history.year === y }, y)));
 
   sec.history.replaceChildren(
     h('div', { class: 'section-head row' },
       h('div', null,
-        h('h2', null, 'Results history'),
-        h('p', { class: 'lede' }, `Every ${game.name} draw since the current format began on ${fmtDate(fmt.since)}.${checking ? ' Numbers your line matched stay bright.' : ''}`)),
+        h('h2', null, T.historyTitle),
+        h('p', { class: 'lede' }, T.historyLede(game.name, fmtDate(fmt.since), checking))),
       h('div', { class: 'history-tools' },
         checking ? h('label', { class: 'check' },
           h('input', {
             type: 'checkbox',
             checked: state.history.winsOnly,
             onchange: (e) => { state.history.winsOnly = e.target.checked; state.history.limit = 25; renderHistory(ctx); $('.check input', sec.history)?.focus(); },
-          }), 'Only draws your line won') : null,
+          }), T.winsOnly) : null,
         yearSelect)),
     h('div', { class: 'card flush' }, table,
       h('div', { class: 'table-foot' },
-        h('span', { class: 'muted' }, rows.length ? `Showing ${fmtInt(shown.length)} of ${plural(rows.length, 'draw')}` : 'No draws match.'),
+        h('span', { class: 'muted' }, rows.length ? T.showing(shown.length, rows.length) : T.noMatch),
         shown.length < rows.length ? h('button', {
           class: 'btn small',
           type: 'button',
           onclick: () => { state.history.limit += 50; renderHistory(ctx); $('.table-foot .btn', sec.history)?.focus(); },
-        }, 'Show 50 more') : null)));
+        }, T.showMore) : null)));
 }
 
 // ---------------------------------------------------------------- odds
@@ -793,54 +784,58 @@ function renderOdds(ctx) {
   // Winner counts only exist where a latest-draw breakdown was read.
   const withWinners = Boolean(info?.tiers?.length);
   const rows = game.tiers.map((t, i) => {
-    const row = [tierLabel(game, t), fmtOdds(S.overRounds(probs[i], rounds)), prizeText(ctx, i)];
+    const row = [T.tier(game, t), fmtOdds(S.overRounds(probs[i], rounds)), prizeText(ctx, i)];
     if (withWinners) row.push(tierInfo(ctx, i) ? fmtInt(tierInfo(ctx, i).winners) : '—');
     return row;
   });
   const any = S.overRounds(sum(probs), rounds);
-  const head = ['Prize tier', 'Odds per line', withWinners ? `Prize each, ${fmtDate(info.date)}` : 'Prize'];
-  if (withWinners) head.push(game.id === 'euromillions' ? 'UK winners' : 'Winners');
+  const head = [T.prizeTier, T.oddsPerLine, withWinners ? T.prizeOn(fmtDate(info.date)) : T.prize];
+  if (withWinners) head.push(game.id === 'euromillions' ? T.ukWinners : T.winners);
   const tableEl = buildTable({ head, rows, numeric: withWinners ? [1, 2, 3] : [1, 2] });
   $('table', tableEl).append(h('tfoot', null, h('tr', null,
-    h('th', { scope: 'row' }, 'Any prize'), h('td', { class: 'num' }, fmtOdds(any)), h('td'), withWinners ? h('td') : null)));
+    h('th', { scope: 'row' }, T.anyPrize), h('td', { class: 'num' }, fmtOdds(any)), h('td'), withWinners ? h('td') : null)));
   sec.odds.replaceChildren(
     h('div', { class: 'section-head' },
-      h('h2', null, 'Odds and prizes'),
-      h('p', { class: 'lede' }, `${game.rules} ${scheduleText(game, ctx.drawDays)} The odds are exact, worked out from how many lines are possible.`)),
+      h('h2', null, T.oddsTitle),
+      h('p', { class: 'lede' }, T.oddsLede(game.rules, T.schedule(game, ctx.drawDays)))),
     h('div', { class: 'card flush' }, tableEl, h('p', { class: 'note pad' }, game.prizeNote)));
 }
 
 // ---------------------------------------------------------------- shell
 
 function renderError(err) {
-  sec.hero.replaceChildren(h('div', { class: 'hero-main' }, h('h1', null, 'Results are unavailable right now'), h('p', null, String(err.message || err))));
+  sec.hero.replaceChildren(h('div', { class: 'hero-main' }, h('h1', null, T.unavailable), h('p', null, String(err.message || err))));
   for (const k of ['picks', 'backtest', 'stats', 'check', 'history', 'odds']) sec[k].replaceChildren();
+}
+
+function renderAll(ctx, resetHistory = true) {
+  renderHero(ctx);
+  renderPicks(ctx);
+  renderBacktest(ctx);
+  renderStats(ctx);
+  renderCheck(ctx, resetHistory);
+  renderOdds(ctx);
+  document.title = T.title(ctx.game.name);
+  const updated = $('#updated');
+  if (updated) updated.textContent = T.updated(ctx.game.name, fmtDate(ctx.lastDate, 'long'));
 }
 
 // ---------------------------------------------------------------- lottery picker and footer
 
-const link = (text, href) => h('a', { href, rel: 'noopener' }, text);
-const ukHelpline = () => [' In the UK, call the National Gambling Helpline on ', link('0808 8020 133', 'tel:08088020133'), '.'];
-// Help for the country each lottery is played in. Checked November 2026.
-const HELP = {
-  uk: () => [h('strong', null, '18+ only.'), ' If gambling stops being fun, free and confidential help is available from ',
-    link('BeGambleAware', 'https://www.begambleaware.org/'), ' and the National Gambling Helpline on ', link('0808 8020 133', 'tel:08088020133'), '.'],
-  ie: () => [h('strong', null, '18+ only.'), ' If gambling stops being fun, the Gambling Care helpline is free and open 24 hours on ',
-    link('1800 936 725', 'tel:1800936725'), ', and ', link('Problem Gambling Ireland', 'https://www.problemgambling.ie/'), ' has more support.', ...ukHelpline()],
-  eu: () => [h('strong', null, '18+ only.'), ' Eurojackpot is sold by national lotteries across Europe, and each one points to help in its own country.', ...ukHelpline()],
-  us: () => [h('strong', null, 'You must be 18 or older to play, or 19 or 21 in some states.'),
-    ' If gambling stops being fun, call or text the National Problem Gambling Helpline on ', link('1-800-MY-RESET', 'tel:+18006973738'),
-    ' at any time, or visit ', link('ncpgambling.org', 'https://www.ncpgambling.org/'), '.', ...ukHelpline()],
-};
-
 function renderFooter(op) {
-  $('#help-note').replaceChildren(...HELP[op.help]());
-  $('#source-note').textContent = `Lottery Lab is an independent statistics site. It isn't connected to any lottery operator, including ${op.name}. ${op.source} They refresh automatically after each draw. Always check tickets with the official operator.`;
+  $('#help-note').replaceChildren(...T.help[op.help]());
+  $('#source-note').textContent = T.sourceNote(op);
+}
+
+function fillOperators() {
+  const select = $('#operator');
+  select.replaceChildren(...OPERATORS.map((o) => h('option', { value: o.id }, localize(o).label)));
+  if (state.id) select.value = operatorOf(state.id).id;
 }
 
 function initNav() {
+  fillOperators();
   const select = $('#operator');
-  select.replaceChildren(...OPERATORS.map((o) => h('option', { value: o.id }, o.label)));
   // Switching lottery opens the game you last looked at there, or its first game.
   select.addEventListener('change', () => {
     const op = OPERATORS.find((o) => o.id === select.value);
@@ -850,9 +845,9 @@ function initNav() {
 }
 
 function updateNav(id) {
-  const op = operatorOf(id);
+  const op = localize(operatorOf(id));
   $('#operator').value = op.id;
-  $('#tabs').replaceChildren(...op.games.map((g) => h('a', { href: `#${g}`, 'data-game': g, 'aria-current': g === id ? 'page' : null }, GAMES[g].name)));
+  $('#tabs').replaceChildren(...op.games.map((g) => h('a', { href: `#${g}`, 'data-game': g, 'aria-current': g === id ? 'page' : null }, localize(GAMES[g]).name)));
   renderFooter(op);
 }
 
@@ -872,15 +867,7 @@ async function show(id) {
     state.ctx = ctx;
     state.check = { main: new Set(), bonus: new Set() };
     state.history = { year: 'all', limit: 25, winsOnly: false };
-    renderHero(ctx);
-    renderPicks(ctx);
-    renderBacktest(ctx);
-    renderStats(ctx);
-    renderCheck(ctx);
-    renderOdds(ctx);
-    document.title = `${ctx.game.name} results, stats and picks · Lottery Lab`;
-    const updated = $('#updated');
-    if (updated) updated.textContent = `${ctx.game.name} results up to ${fmtDate(ctx.lastDate, 'long')}.`;
+    renderAll(ctx);
     store('game', id);
     store(`game:${ctx.op.id}`, id);
   } catch (err) {
@@ -901,21 +888,59 @@ function route() {
   }
 }
 
+// ---------------------------------------------------------------- theme and language
+
+const currentTheme = () => document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+const themeLabel = () => $('#theme-toggle').setAttribute('aria-label', T.themeTo(currentTheme() === 'dark'));
+
 function initTheme() {
-  const btn = $('#theme-toggle');
-  const current = () => document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-  const label = () => btn.setAttribute('aria-label', current() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
-  label();
-  btn.addEventListener('click', () => {
-    const next = current() === 'dark' ? 'light' : 'dark';
+  $('#theme-toggle').addEventListener('click', () => {
+    const next = currentTheme() === 'dark' ? 'light' : 'dark';
     document.documentElement.dataset.theme = next;
     store('theme', next);
-    label();
+    themeLabel();
   });
 }
 
+/** The text that's in index.html: elements marked data-i18n (text) and data-i18n-aria (aria-label). */
+function applyStatic() {
+  for (const el of document.querySelectorAll('[data-i18n]')) {
+    const v = T.static[el.dataset.i18n];
+    el.replaceChildren(...[typeof v === 'function' ? v() : v].flat());
+  }
+  for (const el of document.querySelectorAll('[data-i18n-aria]')) el.setAttribute('aria-label', T.static[el.dataset.i18nAria]);
+  const btn = $('#lang-toggle');
+  btn.textContent = T.other.text;
+  btn.lang = T.other.lang;
+  btn.setAttribute('aria-label', T.other.aria);
+  themeLabel();
+}
+
+// The page redraws in place, keeping the chosen line, filters and scroll position. The choice is
+// remembered, and the address gets ?lang=zh so a Chinese link can be shared.
+function switchLang(id) {
+  setLang(id);
+  store('lang', id);
+  const url = new URL(location.href);
+  if (id === 'en') url.searchParams.delete('lang');
+  else url.searchParams.set('lang', id);
+  history.replaceState(history.state, '', url);
+  applyStatic();
+  fillOperators();
+  if (!state.id) return;
+  updateNav(state.id);
+  if (state.ctx) {
+    hideTip();
+    state.ctx = buildContext(state.id, state.ctx.doc);
+    renderAll(state.ctx, false);
+  }
+}
+
 async function init() {
+  setLang(initialLang());
+  applyStatic();
   initTheme();
+  $('#lang-toggle').addEventListener('click', () => switchLang(T.other.id));
   initNav();
   try {
     state.latest = await getJson('data/latest.json');

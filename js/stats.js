@@ -167,13 +167,14 @@ const isArithmetic = (s) => s.length > 2 && s.every((v, i) => i < 2 || v - s[i -
 
 export const WINDOW = 50;
 
+// Names and descriptions are in i18n.js. `random` marks the methods that can be re-rolled.
 export const STRATEGIES = [
-  { id: 'hot', name: 'Hot numbers', tag: `Last ${WINDOW} draws`, desc: `The numbers drawn most often in the last ${WINDOW} draws.` },
-  { id: 'cold', name: 'Cold numbers', tag: `Last ${WINDOW} draws`, desc: `The numbers drawn least often in the last ${WINDOW} draws.` },
-  { id: 'overdue', name: 'Overdue', tag: 'Longest gaps', desc: 'The numbers that have gone the longest without being drawn.' },
-  { id: 'balanced', name: 'Balanced', tag: 'Typical shape', random: true, desc: 'A random line shaped like most real draws: a mid-range total, a mix of odd and even and of high and low, and no long runs.' },
-  { id: 'unpopular', name: 'Unpopular', tag: 'Fewer to share with', random: true, desc: 'Leans towards numbers above 31 and away from 7 and runs, which many players choose.' },
-  { id: 'random', name: 'Lucky Dip', tag: 'Pure chance', random: true, desc: 'Every number equally likely, like a Lucky Dip.' },
+  { id: 'hot' },
+  { id: 'cold' },
+  { id: 'overdue' },
+  { id: 'balanced', random: true },
+  { id: 'unpopular', random: true },
+  { id: 'random', random: true },
 ];
 
 const shapeCache = new Map();

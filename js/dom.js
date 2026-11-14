@@ -19,6 +19,10 @@ export function h(tag, attrs, ...children) {
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 
+// The interface language, 'en' or 'zh'. i18n.js sets it; the date and odds formats below follow it.
+let lang = 'en';
+export const setFormatLang = (id) => { lang = id; };
+
 export const fmtInt = (n) => Math.round(n).toLocaleString('en-GB');
 export const fmtNum = (n, d = 2) => n.toLocaleString('en-GB', { minimumFractionDigits: d, maximumFractionDigits: d });
 export const fmtPct = (x, d = 1) => `${(x * 100).toFixed(d)}%`;
@@ -29,17 +33,33 @@ export function fmtMoney(n, symbol = '£') {
   return `${symbol}${n.toLocaleString('en-GB', whole ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-/** "1 in 13.0" for small odds, "1 in 139,838,160" for big ones. */
+/** "1 in 13.0" for small odds, "1 in 139,838,160" for big ones; "1/13.0" in Chinese. */
 export const fmtOdds = (p) => {
   const x = 1 / p;
-  return `1 in ${x >= 100 ? fmtInt(x) : x.toFixed(1)}`;
+  const n = x >= 100 ? fmtInt(x) : x.toFixed(1);
+  return lang === 'zh' ? `1/${n}` : `1 in ${n}`;
 };
 
 // Dates are kept as YYYY-MM-DD strings and formatted at noon UTC so no time zone can shift the day.
 const asDate = (s) => new Date(`${s}T12:00:00Z`);
 const part = (s, o) => asDate(s).toLocaleDateString('en-GB', { timeZone: 'UTC', ...o });
+const ZH_WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+// Built by hand so every engine gives the same "2026年11月13日 星期五".
+function fmtDateZh(s, style) {
+  const [y, m, d] = s.split('-').map(Number);
+  const wd = ZH_WEEKDAYS[asDate(s).getUTCDay()];
+  switch (style) {
+    case 'long': return `${y}年${m}月${d}日 ${wd}`;
+    case 'day': return `${m}月${d}日 ${wd}`;
+    case 'weekday': return wd;
+    case 'dm': return `${m}月${d}日`;
+    case 'month': return `${y}年${m}月`;
+    default: return `${y}年${m}月${d}日`;
+  }
+}
 // British order without the comma some engines insert: "Friday 13 November 2026".
 export function fmtDate(s, style = 'short') {
+  if (lang === 'zh') return fmtDateZh(s, style);
   const wd = () => part(s, { weekday: 'long' });
   switch (style) {
     case 'long': return `${wd()} ${part(s, { day: 'numeric', month: 'long', year: 'numeric' })}`;
@@ -67,7 +87,8 @@ export function ball(n, kind = 'main', state = '') {
 
 /** A row of balls. `hits` (optional) dims the numbers a checked line did not match. */
 export function balls(main, bonus, { size = '', hits = null, bonusName = 'bonus' } = {}) {
-  const label = `${main.join(', ')}${bonus.length ? `; ${bonusName} ${bonus.join(', ')}` : ''}`;
+  const [sep, semi] = lang === 'zh' ? ['、', '；'] : [', ', '; '];
+  const label = `${main.join(sep)}${bonus.length ? `${semi}${bonusName} ${bonus.join(sep)}` : ''}`;
   const mark = (set, n) => (hits ? (set.has(n) ? 'hit' : 'miss') : '');
   return h('span', { class: `balls${size ? ` ${size}` : ''}`, role: 'img', 'aria-label': label },
     main.map((n) => ball(n, 'main', mark(hits?.main || new Set(), n))),

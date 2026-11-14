@@ -3,6 +3,7 @@
 // series colour), a tooltip on every mark (pointer and keyboard), and a table view for every chart.
 
 import { h, fmtInt } from './dom.js';
+import { T } from './i18n.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -298,12 +299,12 @@ export function chartCard({ title, subtitle, legend, draw, table, note, wide }) 
   const host = h('div', { class: 'viz-host' });
   const tableWrap = h('div', { class: 'viz-table' });
   tableWrap.hidden = true;
-  const toggle = h('button', { class: 'btn small ghost', type: 'button', 'aria-pressed': 'false' }, 'Table');
+  const toggle = h('button', { class: 'btn small ghost', type: 'button', 'aria-pressed': 'false' }, T.table);
   let built = false;
   toggle.addEventListener('click', () => {
     const on = toggle.getAttribute('aria-pressed') !== 'true';
     toggle.setAttribute('aria-pressed', String(on));
-    toggle.textContent = on ? 'Chart' : 'Table';
+    toggle.textContent = on ? T.chart : T.table;
     if (on && !built) {
       tableWrap.append(buildTable(table()));
       built = true;

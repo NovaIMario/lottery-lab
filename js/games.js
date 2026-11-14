@@ -3,6 +3,7 @@
 // Each tier is [main numbers matched, bonus numbers matched]. In games where the bonus ball comes out of
 // the main drum and players don't pick it (Lotto, Health Lottery, Irish Lotto), 'bonus' means
 // "plus the Bonus Ball", which counts when it matches one of the player's other numbers.
+// Each `zh` block holds the Simplified Chinese text for the page; it replaces the English fields of the same name.
 
 export const OPERATORS = [
   {
@@ -14,6 +15,7 @@ export const OPERATORS = [
     help: 'uk',
     games: ['euromillions', 'lotto', 'thunderball', 'set-for-life'],
     source: "Results come from the public archives at lottery.co.uk and The National Lottery's results feed.",
+    zh: { label: '英国国家彩票', name: '英国国家彩票', source: '开奖结果来自 lottery.co.uk 的公开存档和英国国家彩票的官方结果数据。', quickPick: '机选' },
   },
   {
     id: 'health-lottery',
@@ -24,6 +26,7 @@ export const OPERATORS = [
     help: 'uk',
     games: ['health-lottery'],
     source: 'Results come from the public archives at lottery.co.uk.',
+    zh: { label: '英国健康彩票', name: '英国健康彩票', source: '开奖结果来自 lottery.co.uk 的公开存档。', quickPick: '机选' },
   },
   {
     id: 'irish-national-lottery',
@@ -34,6 +37,7 @@ export const OPERATORS = [
     help: 'ie',
     games: ['irish-lotto'],
     source: 'Results and prize breakdowns come from the public archives at irishlottery.com.',
+    zh: { label: '爱尔兰国家彩票', name: '爱尔兰国家彩票', source: '开奖结果和奖金明细来自 irishlottery.com 的公开存档。', quickPick: '机选' },
   },
   {
     id: 'eurojackpot',
@@ -44,6 +48,7 @@ export const OPERATORS = [
     help: 'eu',
     games: ['eurojackpot'],
     source: 'Results and prize breakdowns come from the public archives at euro-jackpot.net.',
+    zh: { label: '欧洲大奖（欧洲）', name: '欧洲大奖', source: '开奖结果和奖金明细来自 euro-jackpot.net 的公开存档。', quickPick: '机选' },
   },
   {
     id: 'us-lotteries',
@@ -54,6 +59,7 @@ export const OPERATORS = [
     help: 'us',
     games: ['powerball', 'mega-millions'],
     source: "Results come from New York State's open data (data.ny.gov), which publishes the official winning numbers.",
+    zh: { label: '强力球和超级百万（美国）', name: '美国各州彩票', source: '开奖结果来自纽约州开放数据平台（data.ny.gov），该平台发布官方开奖号码。', quickPick: '机选' },
   },
 ];
 
@@ -67,6 +73,7 @@ export const GAMES = {
     sharedJackpot: true,
     rules: 'Pick 5 numbers from 1 to 50 and 2 Lucky Stars from 1 to 12.',
     prizeNote: 'Prizes and winners are for UK players. EuroMillions prize amounts change with ticket sales across Europe.',
+    zh: { name: '欧洲百万', bonusName: '幸运星', rules: '从1到50中选5个号码，再从1到12中选2个幸运星。', prizeNote: '奖金和中奖注数只统计英国玩家。欧洲百万的奖金随全欧洲的彩票销量变化。' },
   },
   lotto: {
     id: 'lotto',
@@ -78,6 +85,7 @@ export const GAMES = {
     sharedJackpot: true,
     rules: 'Pick 6 numbers from 1 to 59. Since June 2026 each draw night has two rounds, so every line gets two chances.',
     prizeNote: 'Odds cover both rounds of a draw night. Winners are the total across both rounds.',
+    zh: { name: '乐透', bonusName: '附加球', rules: '从1到59中选6个号码。自2026年6月起，每个开奖夜开两轮，每注号码有两次机会。', prizeNote: '概率涵盖一个开奖夜的两轮开奖，中奖注数是两轮的合计。' },
   },
   thunderball: {
     id: 'thunderball',
@@ -88,6 +96,7 @@ export const GAMES = {
     fixedPrizes: [500000, 5000, 250, 100, 20, 10, 10, 5, 3],
     rules: 'Pick 5 numbers from 1 to 39 and a Thunderball from 1 to 14.',
     prizeNote: 'Thunderball prizes are fixed amounts.',
+    zh: { name: '雷霆球', bonusName: '雷霆球', rules: '从1到39中选5个号码，再从1到14中选1个雷霆球。', prizeNote: '雷霆球的奖金都是固定金额。' },
   },
   'set-for-life': {
     id: 'set-for-life',
@@ -98,6 +107,7 @@ export const GAMES = {
     fixedPrizes: ['£10,000 a month for 30 years', '£10,000 a month for 1 year', 250, 50, 30, 20, 10, 5],
     rules: 'Pick 5 numbers from 1 to 47 and a Life Ball from 1 to 10.',
     prizeNote: 'Set For Life prizes are fixed amounts.',
+    zh: { name: '终身无忧', bonusName: '生命球', rules: '从1到47中选5个号码，再从1到10中选1个生命球。', prizeNote: '终身无忧的奖金都是固定金额。', fixedPrizes: ['每月£10,000，连续30年', '每月£10,000，连续1年', 250, 50, 30, 20, 10, 5] },
   },
   'health-lottery': {
     id: 'health-lottery',
@@ -110,6 +120,7 @@ export const GAMES = {
     topPrizeNote: 'Fixed, and shared if more than one line wins',
     rules: 'Pick 5 numbers from 1 to 50. A Bonus Ball is drawn after the main five and counts when it matches one of your other numbers.',
     prizeNote: "The £25,000 jackpot is fixed and doesn't roll over. If more than one line matches all five numbers, it's shared between them. The other prizes are fixed amounts.",
+    zh: { name: '健康彩票', bonusName: '附加球', topPrizeNote: '固定金额，多注中奖时平分', rules: '从1到50中选5个号码。5个主号码之后会再摇出一个附加球，它与你选的其余号码之一相同时计入。', prizeNote: '£25,000的头奖是固定的，不会滚存。如果有多注号码命中全部5个号码，就由它们平分。其他奖金都是固定金额。', fixedPrizes: [25000, 10000, 300, 50, 10, 5, '免费彩票一张', '免费彩票一张'] },
   },
   'irish-lotto': {
     id: 'irish-lotto',
@@ -120,6 +131,7 @@ export const GAMES = {
     sharedJackpot: true,
     rules: 'Pick 6 numbers from 1 to 47. A Bonus Ball is drawn after the main six and counts when it matches one of your other numbers.',
     prizeNote: "Irish Lotto prizes are shares of a prize fund, so they change from draw to draw. Lotto Plus 1 and Plus 2 are separate add-on draws and aren't included here.",
+    zh: { name: '爱尔兰乐透', bonusName: '附加球', rules: '从1到47中选6个号码。6个主号码之后会再摇出一个附加球，它与你选的其余号码之一相同时计入。', prizeNote: '爱尔兰乐透的奖金按奖金池比例分配，所以每期都不同。Lotto Plus 1 和 Plus 2 是单独的附加开奖，这里不包括。' },
   },
   eurojackpot: {
     id: 'eurojackpot',
@@ -130,6 +142,7 @@ export const GAMES = {
     sharedJackpot: true,
     rules: 'Pick 5 numbers from 1 to 50 and 2 Euro Numbers from 1 to 12.',
     prizeNote: 'Eurojackpot prizes are shares of a prize pool, so they change from draw to draw, and the jackpot is capped at €120 million. Winners are counted across every country that sells it.',
+    zh: { name: '欧洲大奖', bonusName: '欧元号码', rules: '从1到50中选5个号码，再从1到12中选2个欧元号码。', prizeNote: '欧洲大奖的奖金按奖池比例分配，所以每期都不同，头奖上限为1.2亿欧元。中奖注数统计所有销售国家。' },
   },
   powerball: {
     id: 'powerball',
@@ -142,6 +155,7 @@ export const GAMES = {
     sharedJackpot: true,
     rules: 'Pick 5 numbers from 1 to 69 and a Powerball from 1 to 26.',
     prizeNote: 'Prizes below the jackpot are fixed, before the optional Power Play multiplier. In California every prize is paid from a shared pool instead.',
+    zh: { name: '强力球', bonusName: '强力球', drawTime: '美国东部时间晚上10:59', rules: '从1到69中选5个号码，再从1到26中选1个强力球。', prizeNote: '头奖以下的奖金是固定的，未计入可选的 Power Play 倍数。在加利福尼亚州，所有奖金都改从共享奖池中支付。' },
   },
   'mega-millions': {
     id: 'mega-millions',
@@ -154,27 +168,10 @@ export const GAMES = {
     sharedJackpot: true,
     rules: 'Pick 5 numbers from 1 to 70 and a Mega Ball from 1 to 24.',
     prizeNote: 'Every ticket carries a random multiplier from 2× to 10× on prizes below the jackpot, so each prize is a range. In California every prize is paid from a shared pool instead.',
+    zh: { name: '超级百万', bonusName: '超级球', drawTime: '美国东部时间晚上11点', rules: '从1到70中选5个号码，再从1到24中选1个超级球。', prizeNote: '每张彩票都带有2×到10×的随机倍数，作用于头奖以下的奖金，所以每个奖级的奖金都是一个范围。在加利福尼亚州，所有奖金都改从共享奖池中支付。', fixedPrizes: [null, '$200万至$1000万', '$2万至$10万', '$1,000至$5,000', '$400至$2,000', '$20至$100', '$20至$100', '$14至$70', '$10至$50'] },
   },
 };
 
 export const GAME_ORDER = OPERATORS.flatMap((o) => o.games);
 
 export const operatorOf = (gameId) => OPERATORS.find((o) => o.games.includes(gameId)) ?? OPERATORS[0];
-
-export function tierLabel(game, [main, bonus]) {
-  if (bonus === 'bonus') return `Match ${main} + Bonus Ball`;
-  if (!bonus) return `Match ${main}`;
-  const words = game.bonus.tierWord;
-  const word = words ? words[bonus > 1 ? 1 : 0] : game.bonus.singular;
-  return `Match ${main} + ${game.bonus.tierWord ? `${bonus} ` : ''}${word}`;
-}
-
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-/** "Draws every Monday, Wednesday and Saturday at 10:59 pm US Eastern time." */
-export function scheduleText(game, days) {
-  const names = [1, 2, 3, 4, 5, 6, 0].filter((d) => days.includes(d)).map((d) => DAY_NAMES[d]);
-  const when = names.length === 7 ? 'every day'
-    : `every ${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]}`;
-  return `Draws ${when}${game.drawTime ? ` at ${game.drawTime}` : ''}.`;
-}

@@ -5,6 +5,10 @@
  *   node scripts/update.mjs              refresh: this year's results plus the latest-draw details
  *   node scripts/update.mjs --seed       rebuild: every result since each game's current format began
  *   node scripts/update.mjs --only=a,b   limit the run to some games (ids as in data/<id>.json)
+ *   node scripts/update.mjs --due        only the games with something to collect: a draw whose results
+ *                                        should be out by now, or a recent prize breakdown that's missing or
+ *                                        provisional. The frequent scheduled runs use it; most of them find
+ *                                        nothing due and make no requests at all.
  *
  * Public sources:
  *   - lottery.co.uk yearly archives: The National Lottery's games and the Health Lottery
@@ -26,49 +30,59 @@ const UA = 'Mozilla/5.0 (compatible; lottery-results-bot/1.0)';
 const DELAY_MS = 1500; // between requests, to stay polite
 const SEED = process.argv.includes('--seed');
 const ONLY = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7).split(',').filter(Boolean);
+const DUE = process.argv.includes('--due');
 const IN_CI = Boolean(process.env.GITHUB_ACTIONS);
 
 // Each game's current format. Older draws used different number ranges or rules, so they are left out.
 // `sameDrum`: the bonus ball comes out of the main drum after the main numbers, and players don't pick it.
+// `tz` and `ready`: the local time by which a draw's results are normally published (about half an hour
+// after the draw), which --due uses to decide whether a game needs checking.
 const GAMES = [
   // The National Lottery (UK)
   {
     id: 'euromillions', name: 'EuroMillions', since: '2016-09-27', source: 'lottery.co.uk', latest: 'national-lottery',
+    tz: 'Europe/London', ready: '21:00',
     main: { cls: 'euromillions-ball', count: 5, max: 50 },
     bonus: { cls: 'euromillions-lucky-star', count: 2, max: 12, name: 'Lucky Stars' },
     jackpotColumn: true,
   },
   {
     id: 'lotto', name: 'Lotto', since: '2015-10-10', source: 'lottery.co.uk', latest: 'national-lottery',
+    tz: 'Europe/London', ready: '20:45',
     main: { cls: 'lotto-ball', count: 6, max: 59 },
     bonus: { cls: 'lotto-bonus-ball', count: 1, max: 59, name: 'Bonus Ball', sameDrum: true },
     jackpotColumn: true,
   },
   {
     id: 'thunderball', name: 'Thunderball', since: '2010-05-12', source: 'lottery.co.uk', latest: 'national-lottery',
+    tz: 'Europe/London', ready: '20:45',
     main: { cls: 'thunderball-ball', count: 5, max: 39 },
     bonus: { cls: 'thunderball-thunderball', count: 1, max: 14, name: 'Thunderball' },
   },
   {
     id: 'set-for-life', name: 'Set For Life', since: '2019-03-18', source: 'lottery.co.uk', latest: 'national-lottery',
+    tz: 'Europe/London', ready: '20:45',
     main: { cls: 'setForLife-ball', count: 5, max: 47 },
     bonus: { cls: 'setForLife-life-ball', count: 1, max: 10, name: 'Life Ball' },
   },
   // The Health Lottery (UK). Its Bonus Ball began on 11 May 2013.
   {
     id: 'health-lottery', name: 'Health Lottery', since: '2013-05-11', source: 'lottery.co.uk',
+    tz: 'Europe/London', ready: '21:30',
     main: { cls: 'health-ball', count: 5, max: 50 },
     bonus: { cls: 'health-bonus-ball', count: 1, max: 50, name: 'Bonus Ball', sameDrum: true },
   },
   // Irish National Lottery. 6 from 47 since 5 September 2015. Lotto Plus 1 and 2 are separate add-on draws.
   {
     id: 'irish-lotto', name: 'Irish Lotto', since: '2015-09-05', source: 'irishlottery.com', latest: 'irishlottery.com',
+    tz: 'Europe/Dublin', ready: '20:45',
     main: { count: 6, max: 47 },
     bonus: { count: 1, max: 47, name: 'Bonus Ball', sameDrum: true },
   },
   // Eurojackpot. Euro Numbers went from 1-10 to 1-12 on 25 March 2022, when the Tuesday draw began.
   {
     id: 'eurojackpot', name: 'Eurojackpot', since: '2022-03-25', source: 'euro-jackpot.net', latest: 'euro-jackpot.net',
+    tz: 'Europe/Berlin', ready: '21:30',
     main: { count: 5, max: 50 },
     bonus: { count: 2, max: 12, name: 'Euro Numbers' },
   },
@@ -76,12 +90,14 @@ const GAMES = [
   // Powerball has been 5 from 69 plus 1 from 26 since 7 October 2015; its sixth number is the Powerball.
   {
     id: 'powerball', name: 'Powerball', since: '2015-10-07', source: 'data.ny.gov', dataset: 'd6yy-54nr',
+    tz: 'America/New_York', ready: '23:30',
     main: { count: 5, max: 69 },
     bonus: { count: 1, max: 26, name: 'Powerball' },
   },
   // Mega Millions became 5 from 70 plus a Mega Ball from 1 to 24 on 8 April 2025.
   {
     id: 'mega-millions', name: 'Mega Millions', since: '2025-04-08', source: 'data.ny.gov', dataset: '5xaw-6ayf', bonusField: 'mega_ball',
+    tz: 'America/New_York', ready: '23:30',
     main: { count: 5, max: 70 },
     bonus: { count: 1, max: 24, name: 'Mega Ball' },
   },
@@ -389,6 +405,54 @@ function merge(existing, incoming) {
 }
 
 const daysBetween = (a, b) => Math.round((new Date(`${b}T12:00:00Z`) - new Date(`${a}T12:00:00Z`)) / 864e5);
+const addDays = (iso, n) => {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+const weekday = (iso) => new Date(`${iso}T12:00:00Z`).getUTCDay();
+
+// ---------------------------------------------------------------- which games are due (--due)
+
+/** The moment a local time on a date occurs in a time zone, e.g. 21:00 in London on 2026-11-17. */
+function zonedTime(date, hhmm, tz) {
+  const wall = new Date(`${date}T${hhmm}:00Z`);
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric',
+  }).formatToParts(wall).map((p) => [p.type, Number(p.value)]));
+  const offset = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute) - wall.getTime();
+  return new Date(wall.getTime() - offset);
+}
+
+/** Weekdays with a draw in at least 3 of the last 6 weeks of results, so schedule changes are picked up. */
+function drawDays(draws) {
+  const cut = addDays(draws[0].date, -42);
+  const weeks = new Array(7).fill(0);
+  let prev = null;
+  for (const d of draws) {
+    if (d.date <= cut) break;
+    if (d.date !== prev) weeks[weekday(d.date)]++;
+    prev = d.date;
+  }
+  const days = weeks.flatMap((n, i) => (n >= 3 ? [i] : []));
+  return days.length ? days : [0, 1, 2, 3, 4, 5, 6];
+}
+
+/**
+ * A game is due once the results of the draw after its newest stored one should be out, and for two
+ * days after a draw while that draw's prize breakdown is missing or provisional. A draw that doesn't
+ * happen (a holiday) keeps the game due until the next one is published.
+ */
+function isDue(game, doc, latest, now) {
+  if (!doc?.draws?.length) return true;
+  const newest = doc.draws[0].date;
+  const recent = daysBetween(newest, now.toISOString().slice(0, 10)) <= 2;
+  if (game.latest && recent && (latest?.date !== newest || latest.confirmed === false)) return true;
+  const days = drawDays(doc.draws);
+  let next = addDays(newest, 1);
+  while (!days.includes(weekday(next))) next = addDays(next, 1);
+  return now >= zonedTime(next, game.ready, game.tz);
+}
 
 // ---------------------------------------------------------------- main
 
@@ -414,6 +478,10 @@ async function main() {
   for (const game of games) {
     const file = path.join(DATA_DIR, `${game.id}.json`);
     const doc = await readJson(file, null);
+    if (DUE && !SEED && !isDue(game, doc, latestGames[game.id], now)) {
+      console.log(`${game.id}: nothing due`);
+      continue;
+    }
     const seedThis = SEED || !doc?.draws?.length;
     const firstYear = Number(game.since.slice(0, 4));
     const years = [];
