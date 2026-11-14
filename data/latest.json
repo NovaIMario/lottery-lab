@@ -1,0 +1,327 @@
+{
+  "updated": "2026-11-14T17:32:27.441Z",
+  "games": {
+    "euromillions": {
+      "drawNumber": 1998,
+      "date": "2026-11-13",
+      "rounds": [
+        {
+          "main": [
+            16,
+            27,
+            32,
+            41,
+            45
+          ],
+          "bonus": [
+            2,
+            12
+          ]
+        }
+      ],
+      "confirmed": true,
+      "jackpot": "£14,195,000",
+      "jackpotWinners": 0,
+      "tiers": [
+        {
+          "level": 1,
+          "winners": 0,
+          "total": 0
+        },
+        {
+          "level": 2,
+          "winners": 2,
+          "total": 259362.2
+        },
+        {
+          "level": 3,
+          "winners": 3,
+          "total": 45462.9
+        },
+        {
+          "level": 4,
+          "winners": 15,
+          "total": 18880.5
+        },
+        {
+          "level": 5,
+          "winners": 203,
+          "total": 19731.6
+        },
+        {
+          "level": 6,
+          "winners": 346,
+          "total": 20137.2
+        },
+        {
+          "level": 7,
+          "winners": 473,
+          "total": 14426.5
+        },
+        {
+          "level": 8,
+          "winners": 4895,
+          "total": 66572
+        },
+        {
+          "level": 9,
+          "winners": 7329,
+          "total": 73290
+        },
+        {
+          "level": 10,
+          "winners": 18764,
+          "total": 138853.6
+        },
+        {
+          "level": 11,
+          "winners": 25274,
+          "total": 159226.2
+        },
+        {
+          "level": 12,
+          "winners": 103614,
+          "total": 497347.2
+        },
+        {
+          "level": 13,
+          "winners": 254468,
+          "total": 788850.8
+        }
+      ],
+      "nextDraw": "2026-11-17",
+      "nextJackpot": "£21,000,000"
+    },
+    "lotto": {
+      "drawNumber": 3223,
+      "date": "2026-11-11",
+      "rounds": [
+        {
+          "main": [
+            4,
+            5,
+            13,
+            18,
+            25,
+            29
+          ],
+          "bonus": [
+            16
+          ]
+        },
+        {
+          "main": [
+            6,
+            26,
+            38,
+            53,
+            57,
+            59
+          ],
+          "bonus": [
+            21
+          ]
+        }
+      ],
+      "confirmed": true,
+      "jackpotWinners": 2,
+      "tiers": [
+        {
+          "level": 1,
+          "winners": 2,
+          "total": 5181752
+        },
+        {
+          "level": 2,
+          "winners": 9,
+          "total": 9000000
+        },
+        {
+          "level": 3,
+          "winners": 149,
+          "total": 149000
+        },
+        {
+          "level": 4,
+          "winners": 5977,
+          "total": 298850
+        },
+        {
+          "level": 5,
+          "winners": 96491,
+          "total": 964910
+        },
+        {
+          "level": 6,
+          "winners": 670224,
+          "total": 670224
+        },
+        {
+          "level": 7,
+          "winners": 0,
+          "total": 0
+        },
+        {
+          "level": 8,
+          "winners": 2,
+          "total": 2000000
+        },
+        {
+          "level": 9,
+          "winners": 23,
+          "total": 23000
+        },
+        {
+          "level": 10,
+          "winners": 1433,
+          "total": 71650
+        },
+        {
+          "level": 11,
+          "winners": 34429,
+          "total": 344290
+        },
+        {
+          "level": 12,
+          "winners": 374211,
+          "total": 374211
+        }
+      ],
+      "nextDraw": "2026-11-14",
+      "nextJackpot": "£2,000,000"
+    },
+    "thunderball": {
+      "drawNumber": 4008,
+      "date": "2026-11-13",
+      "rounds": [
+        {
+          "main": [
+            5,
+            10,
+            29,
+            33,
+            36
+          ],
+          "bonus": [
+            8
+          ]
+        }
+      ],
+      "confirmed": true,
+      "jackpotWinners": 0,
+      "tiers": [
+        {
+          "level": 1,
+          "winners": 0,
+          "total": 0
+        },
+        {
+          "level": 2,
+          "winners": 2,
+          "total": 10000
+        },
+        {
+          "level": 3,
+          "winners": 21,
+          "total": 5250
+        },
+        {
+          "level": 4,
+          "winners": 238,
+          "total": 23800
+        },
+        {
+          "level": 5,
+          "winners": 788,
+          "total": 15760
+        },
+        {
+          "level": 6,
+          "winners": 9473,
+          "total": 94730
+        },
+        {
+          "level": 7,
+          "winners": 9085,
+          "total": 90850
+        },
+        {
+          "level": 8,
+          "winners": 36793,
+          "total": 183965
+        },
+        {
+          "level": 9,
+          "winners": 44771,
+          "total": 134313
+        }
+      ],
+      "nextDraw": "2026-11-14",
+      "nextJackpot": "£500,000"
+    },
+    "set-for-life": {
+      "drawNumber": 800,
+      "date": "2026-11-12",
+      "rounds": [
+        {
+          "main": [
+            2,
+            5,
+            15,
+            17,
+            46
+          ],
+          "bonus": [
+            4
+          ]
+        }
+      ],
+      "confirmed": true,
+      "jackpotWinners": 0,
+      "tiers": [
+        {
+          "level": 1,
+          "winners": 0,
+          "text": "£0"
+        },
+        {
+          "level": 2,
+          "winners": 0,
+          "text": "£0"
+        },
+        {
+          "level": 3,
+          "winners": 21,
+          "total": 5250
+        },
+        {
+          "level": 4,
+          "winners": 214,
+          "total": 10700
+        },
+        {
+          "level": 5,
+          "winners": 1042,
+          "total": 31260
+        },
+        {
+          "level": 6,
+          "winners": 9659,
+          "total": 193180
+        },
+        {
+          "level": 7,
+          "winners": 14853,
+          "total": 148530
+        },
+        {
+          "level": 8,
+          "winners": 130247,
+          "total": 651235
+        }
+      ],
+      "nextDraw": "2026-11-16",
+      "nextJackpot": "£10,000 every month for 30 years"
+    }
+  }
+}
