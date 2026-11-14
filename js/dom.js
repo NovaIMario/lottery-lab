@@ -22,10 +22,11 @@ export const $ = (sel, root = document) => root.querySelector(sel);
 export const fmtInt = (n) => Math.round(n).toLocaleString('en-GB');
 export const fmtNum = (n, d = 2) => n.toLocaleString('en-GB', { minimumFractionDigits: d, maximumFractionDigits: d });
 export const fmtPct = (x, d = 1) => `${(x * 100).toFixed(d)}%`;
-export function fmtMoney(n) {
+/** £, € or $ amounts, whole when they're whole. Text prizes ("Free ticket") pass through unchanged. */
+export function fmtMoney(n, symbol = '£') {
   if (typeof n === 'string') return n;
   const whole = Math.abs(n - Math.round(n)) < 0.005;
-  return `£${n.toLocaleString('en-GB', whole ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${symbol}${n.toLocaleString('en-GB', whole ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 /** "1 in 13.0" for small odds, "1 in 139,838,160" for big ones. */

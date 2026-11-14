@@ -1,4 +1,4 @@
-import { GAMES, GAME_ORDER, tierLabel } from './games.js';
+import { GAMES, GAME_ORDER, OPERATORS, operatorOf, tierLabel, scheduleText } from './games.js';
 import * as S from './stats.js';
 import { columnChart, barChart, chartCard, buildTable, releaseCharts, hideTip } from './charts.js';
 import {
@@ -37,11 +37,26 @@ async function getJson(url) {
 
 // ---------------------------------------------------------------- context
 
-function nextDrawDate(game, info, lastDate) {
+// Draw days come from the results themselves (weekdays with a draw in at least three of the last six
+// weeks), so a schedule change shows up on its own. The list in games.js is the fallback.
+function drawDaysOf(game, draws) {
+  const cut = addDays(draws[0].date, -42);
+  const counts = new Array(7).fill(0);
+  let prev = null;
+  for (const d of draws) {
+    if (d.date <= cut) break;
+    if (d.date !== prev) counts[weekday(d.date)]++;
+    prev = d.date;
+  }
+  const days = counts.flatMap((c, i) => (c >= 3 ? [i] : []));
+  return days.length ? days : game.drawDays;
+}
+
+function nextDrawDate(days, info, lastDate) {
   const today = todayUK();
   if (info?.nextDraw && info.nextDraw >= today && info.nextDraw > lastDate) return info.nextDraw;
   let d = lastDate >= today ? addDays(lastDate, 1) : today;
-  for (let i = 0; i < 8 && !game.drawDays.includes(weekday(d)); i++) d = addDays(d, 1);
+  for (let i = 0; i < 8 && !days.includes(weekday(d)); i++) d = addDays(d, 1);
   return d;
 }
 
@@ -53,22 +68,28 @@ function relDay(date) {
 
 function buildContext(id, doc) {
   const game = GAMES[id];
+  const op = operatorOf(id);
   const draws = doc.draws; // newest first, one entry per round
   const lastDate = draws[0].date;
   const info = state.latest?.games?.[id] ?? null;
+  const drawDays = drawDaysOf(game, draws);
   let bt = null;
   return {
     id,
     game,
+    op,
+    money: (n) => fmtMoney(n, op.currency),
     fmt: doc.format,
     doc,
     draws,
     chrono: [...draws].reverse(),
     lastDate,
     latestDraws: draws.filter((d) => d.date === lastDate),
+    hasJackpots: draws.some((d) => d.jackpot != null),
     info,
     latestInfo: info && info.date === lastDate ? info : null,
-    next: nextDrawDate(game, info, lastDate),
+    drawDays,
+    next: nextDrawDate(drawDays, info, lastDate),
     pickCounts: { main: doc.format.main.count, bonus: game.bonus.picked ? doc.format.bonus.count : 0 },
     get backtest() {
       bt ??= S.backtest(game, doc.format, this.chrono);
@@ -77,24 +98,32 @@ function buildContext(id, doc) {
   };
 }
 
-// Prize per winner for tier i of the latest feed. Lotto reports rounds 1 and 2 as levels 1-6 and 7-12.
+// Prize per winner for tier i of the latest draw. The National Lottery's feed numbers its tiers by level
+// (Lotto reports rounds 1 and 2 as levels 1-6 and 7-12); draw pages key them by what they match.
 function tierInfo(ctx, i, info = ctx.info) {
   if (!info?.tiers?.length) return null;
-  const levels = ctx.game.id === 'lotto' ? [i + 1, i + 7] : [i + 1];
-  const parts = levels.map((l) => info.tiers.find((t) => t.level === l)).filter(Boolean);
+  const [m, b] = ctx.game.tiers[i];
+  const parts = info.tiers[0].match
+    ? info.tiers.filter((t) => t.match[0] === m && t.match[1] === (b === 'bonus' ? 1 : b))
+    : (ctx.game.id === 'lotto' ? [i + 1, i + 7] : [i + 1]).map((l) => info.tiers.find((t) => t.level === l)).filter(Boolean);
   if (!parts.length) return null;
   const winners = sum(parts.map((t) => t.winners));
+  if (parts.length === 1 && parts[0].each != null) return { winners, each: parts[0].each, parts };
   const total = sum(parts.map((t) => t.total || 0));
   return { winners, each: winners && total ? total / winners : null, parts };
 }
 
 function prizeText(ctx, i, info = ctx.info) {
   const t = tierInfo(ctx, i, info);
-  if (t?.each) return fmtMoney(t.each);
+  if (t?.each) return ctx.money(t.each);
   const fixed = ctx.game.fixedPrizes?.[i];
-  if (fixed != null) return fmtMoney(fixed);
+  if (fixed != null) return ctx.money(fixed);
   return i === 0 ? 'Jackpot' : '—';
 }
+
+// The National Lottery calls a random line a Lucky Dip; most other lotteries call it a Quick Pick.
+const strategyName = (ctx, st) => (st.id === 'random' ? ctx.op.quickPick : st.name);
+const strategyDesc = (ctx, st) => (st.id === 'random' ? `Every number equally likely, like a ${ctx.op.quickPick}.` : st.desc);
 
 const lineText = (pick) => `${pick.main.join(' ')}${pick.bonus.length ? ` + ${pick.bonus.join(' ')}` : ''}`;
 
@@ -149,20 +178,34 @@ function breakdown(ctx) {
     h('p', { class: 'note' }, `${game.prizeNote}${info.confirmed ? '' : ' Figures are provisional until confirmed.'}`));
 }
 
-function renderHero(ctx) {
-  const { game, fmt, latestDraws, info, next } = ctx;
-  const two = latestDraws.length > 1;
+function heroFacts(ctx) {
+  const { game, latestDraws, info, next } = ctx;
   const facts = [];
-  if (game.sharedJackpot) {
-    const d = latestDraws[0];
-    facts.push(fact('Jackpot', d.jackpot != null ? fmtMoney(d.jackpot) : ctx.latestInfo?.jackpot ?? '—', jackpotStatus(ctx)));
-  } else {
+  const d = latestDraws[0];
+  const jackpot = d.jackpot != null ? ctx.money(d.jackpot) : ctx.latestInfo?.jackpot;
+  if (jackpot) {
+    facts.push(fact('Jackpot', jackpot, jackpotStatus(ctx)));
+  } else if (game.fixedPrizes?.[0] != null) {
+    // A fixed top prize: Thunderball and Set For Life pay it to every winner, the Health Lottery shares it.
     const winners = ctx.latestInfo ? tierInfo(ctx, 0, ctx.latestInfo)?.winners ?? 0 : null;
-    facts.push(fact('Top prize', fmtMoney(game.fixedPrizes[0]),
-      winners == null ? '' : winners ? `${plural(winners, 'winner')} this draw` : 'No winner this draw'));
+    facts.push(fact(game.sharedJackpot ? 'Jackpot' : 'Top prize', ctx.money(game.fixedPrizes[0]),
+      winners == null ? game.topPrizeNote ?? '' : winners ? `${plural(winners, 'winner')} this draw` : 'No winner this draw'));
+  } else {
+    // No jackpot figure in the data (the US games): the odds are the honest headline.
+    facts.push(fact('Jackpot odds', fmtOdds(S.tierProbabilities(game, ctx.fmt)[0]), 'For each line played'));
   }
-  facts.push(fact('Next draw', fmtDate(next, 'day'), relDay(next)));
-  if (game.sharedJackpot && info?.nextJackpot && info.nextDraw === next) facts.push(fact('Estimated jackpot', info.nextJackpot, 'Before tickets close'));
+  // US draws happen late evening Eastern time, after midnight in the UK, so say when.
+  facts.push(fact('Next draw', fmtDate(next, 'day'), [relDay(next), game.drawTime].filter(Boolean).join(', ')));
+  // The National Lottery's feed names the draw its estimate is for; draw pages give the one after the latest draw.
+  const estimate = info?.nextJackpot && (info.nextDraw ? info.nextDraw === next : info.date === ctx.lastDate) ? info.nextJackpot : null;
+  if (game.sharedJackpot && estimate) facts.push(fact('Estimated jackpot', estimate, 'Before tickets close'));
+  return facts;
+}
+
+function renderHero(ctx) {
+  const { game, fmt, latestDraws } = ctx;
+  const two = latestDraws.length > 1;
+  const facts = heroFacts(ctx);
 
   const dates = [...new Set(ctx.draws.map((d) => d.date))].slice(1, two ? 4 : 6);
   const prev = dates.map((date) => h('li', null,
@@ -202,13 +245,13 @@ function pickCard(ctx, st, pick) {
   const { game, fmt } = ctx;
   const bt = ctx.backtest;
   const r = bt.results.find((x) => x.id === st.id);
-  let desc = st.desc;
+  let desc = strategyDesc(ctx, st);
   if (st.id === 'unpopular') {
     desc += game.sharedJackpot ? ' It only matters if you win a shared prize such as the jackpot.'
       : ` ${game.name} prizes are fixed, so here it makes no difference.`;
   }
   const card = h('article', { class: 'card pick', 'data-strategy': st.id },
-    h('header', null, h('h3', null, st.name), h('span', { class: 'chip' }, st.tag)),
+    h('header', null, h('h3', null, strategyName(ctx, st)), h('span', { class: 'chip' }, st.tag)),
     balls(pick.main, pick.bonus, { size: 'md', bonusName: fmt.bonus.name }),
     h('p', { class: 'desc' }, desc),
     h('p', { class: 'bt' }, 'Backtest: ', h('strong', null, fmtNum(r.avg)), ` numbers matched per draw. Chance alone: ${fmtNum(bt.expected.mean)}.`),
@@ -257,7 +300,7 @@ function renderBacktest(ctx) {
   releaseCharts(sec.backtest);
   const bt = ctx.backtest;
   const E = bt.expected;
-  const name = Object.fromEntries(S.STRATEGIES.map((st) => [st.id, st.name]));
+  const name = Object.fromEntries(S.STRATEGIES.map((st) => [st.id, strategyName(ctx, st)]));
   const outside = bt.results.filter((r) => r.avg < E.lo || r.avg > E.hi).length;
   const verdict = outside === 0
     ? `All six methods landed inside the range luck alone produces. None of them has an edge.`
@@ -663,15 +706,15 @@ function renderCheck(ctx) {
               const rand = S.rng((Math.random() * 2 ** 32) >>> 0);
               loadIntoChecker(S.makePick('random', game, fmt, S.newState(fmt), rand));
             },
-          }, 'Lucky Dip'),
+          }, ctx.op.quickPick),
           h('button', { class: 'btn small ghost', type: 'button', onclick: () => { state.check = { main: new Set(), bonus: new Set() }; updateChecker(ctx); } }, 'Clear')),
         h('div', { class: 'check-result', 'aria-live': 'polite' }))));
   updateChecker(ctx);
 }
 
-function jackpotCell(d) {
+function jackpotCell(ctx, d) {
   if (d.jackpot == null) return '—';
-  return h('span', { class: 'jackpot' }, fmtMoney(d.jackpot),
+  return h('span', { class: 'jackpot' }, ctx.money(d.jackpot),
     d.rolldown ? h('span', { class: 'tag' }, 'Rolled down') : d.rollover ? h('span', { class: 'tag' }, 'Rolled over') : h('span', { class: 'tag won' }, 'Won'));
 }
 
@@ -695,7 +738,7 @@ function renderHistory(ctx) {
     if (state.history.winsOnly) rows = rows.filter((g) => results.get(g).some((c) => c.tier >= 0));
   }
   const shown = rows.slice(0, state.history.limit);
-  const showJackpot = Boolean(game.sharedJackpot);
+  const showJackpot = ctx.hasJackpots;
   const matchText = (c) => (c.tier >= 0 ? tierLabel(game, game.tiers[c.tier]) : `${c.m} matched`);
 
   const table = h('div', { class: 'table-scroll' }, h('table', { class: 'data history' },
@@ -709,7 +752,7 @@ function renderHistory(ctx) {
       h('td', { class: 'c-nums' }, g.rounds.map((d) => h('div', { class: 'round-line' },
         g.rounds.length > 1 ? h('span', { class: 'round-label' }, `R${d.round}`) : null,
         balls(d.main, d.bonus, { size: 'sm', hits, bonusName: fmt.bonus.name })))),
-      showJackpot ? h('td', { class: 'num c-jack' }, jackpotCell(g.rounds[0])) : null,
+      showJackpot ? h('td', { class: 'num c-jack' }, jackpotCell(ctx, g.rounds[0])) : null,
       checking ? h('td', { class: 'c-line' }, results.get(g).map((c, i) => h('div', { class: `match${c.tier >= 0 ? ' win' : ''}` },
         g.rounds.length > 1 ? `R${g.rounds[i].round}: ` : '', matchText(c)))) : null)))));
 
@@ -747,21 +790,23 @@ function renderOdds(ctx) {
   const { game, fmt, info } = ctx;
   const rounds = game.twoRoundsSince ? 2 : 1;
   const probs = S.tierProbabilities(game, fmt);
+  // Winner counts only exist where a latest-draw breakdown was read.
+  const withWinners = Boolean(info?.tiers?.length);
   const rows = game.tiers.map((t, i) => {
-    const ti = tierInfo(ctx, i);
-    return [tierLabel(game, t), fmtOdds(S.overRounds(probs[i], rounds)), prizeText(ctx, i), ti ? fmtInt(ti.winners) : '—'];
+    const row = [tierLabel(game, t), fmtOdds(S.overRounds(probs[i], rounds)), prizeText(ctx, i)];
+    if (withWinners) row.push(tierInfo(ctx, i) ? fmtInt(tierInfo(ctx, i).winners) : '—');
+    return row;
   });
   const any = S.overRounds(sum(probs), rounds);
-  const tableEl = buildTable({
-    head: ['Prize tier', 'Odds per line', info ? `Prize each, ${fmtDate(info.date)}` : 'Prize each', game.id === 'euromillions' ? 'UK winners' : 'Winners'],
-    rows,
-    numeric: [1, 2, 3],
-  });
-  $('table', tableEl).append(h('tfoot', null, h('tr', null, h('th', { scope: 'row' }, 'Any prize'), h('td', { class: 'num' }, fmtOdds(any)), h('td'), h('td'))));
+  const head = ['Prize tier', 'Odds per line', withWinners ? `Prize each, ${fmtDate(info.date)}` : 'Prize'];
+  if (withWinners) head.push(game.id === 'euromillions' ? 'UK winners' : 'Winners');
+  const tableEl = buildTable({ head, rows, numeric: withWinners ? [1, 2, 3] : [1, 2] });
+  $('table', tableEl).append(h('tfoot', null, h('tr', null,
+    h('th', { scope: 'row' }, 'Any prize'), h('td', { class: 'num' }, fmtOdds(any)), h('td'), withWinners ? h('td') : null)));
   sec.odds.replaceChildren(
     h('div', { class: 'section-head' },
       h('h2', null, 'Odds and prizes'),
-      h('p', { class: 'lede' }, `${game.summary} The odds are exact, worked out from how many lines are possible.`)),
+      h('p', { class: 'lede' }, `${game.rules} ${scheduleText(game, ctx.drawDays)} The odds are exact, worked out from how many lines are possible.`)),
     h('div', { class: 'card flush' }, tableEl, h('p', { class: 'note pad' }, game.prizeNote)));
 }
 
@@ -772,16 +817,48 @@ function renderError(err) {
   for (const k of ['picks', 'backtest', 'stats', 'check', 'history', 'odds']) sec[k].replaceChildren();
 }
 
-function updateTabs(id) {
-  for (const a of document.querySelectorAll('.tabs a')) {
-    if (a.dataset.game === id) a.setAttribute('aria-current', 'page');
-    else a.removeAttribute('aria-current');
-  }
+// ---------------------------------------------------------------- lottery picker and footer
+
+const link = (text, href) => h('a', { href, rel: 'noopener' }, text);
+const ukHelpline = () => [' In the UK, call the National Gambling Helpline on ', link('0808 8020 133', 'tel:08088020133'), '.'];
+// Help for the country each lottery is played in. Checked November 2026.
+const HELP = {
+  uk: () => [h('strong', null, '18+ only.'), ' If gambling stops being fun, free and confidential help is available from ',
+    link('BeGambleAware', 'https://www.begambleaware.org/'), ' and the National Gambling Helpline on ', link('0808 8020 133', 'tel:08088020133'), '.'],
+  ie: () => [h('strong', null, '18+ only.'), ' If gambling stops being fun, the Gambling Care helpline is free and open 24 hours on ',
+    link('1800 936 725', 'tel:1800936725'), ', and ', link('Problem Gambling Ireland', 'https://www.problemgambling.ie/'), ' has more support.', ...ukHelpline()],
+  eu: () => [h('strong', null, '18+ only.'), ' Eurojackpot is sold by national lotteries across Europe, and each one points to help in its own country.', ...ukHelpline()],
+  us: () => [h('strong', null, 'You must be 18 or older to play, or 19 or 21 in some states.'),
+    ' If gambling stops being fun, call or text the National Problem Gambling Helpline on ', link('1-800-MY-RESET', 'tel:+18006973738'),
+    ' at any time, or visit ', link('ncpgambling.org', 'https://www.ncpgambling.org/'), '.', ...ukHelpline()],
+};
+
+function renderFooter(op) {
+  $('#help-note').replaceChildren(...HELP[op.help]());
+  $('#source-note').textContent = `Lottery Lab is an independent statistics site. It isn't connected to any lottery operator, including ${op.name}. ${op.source} They refresh automatically after each draw. Always check tickets with the official operator.`;
+}
+
+function initNav() {
+  const select = $('#operator');
+  select.replaceChildren(...OPERATORS.map((o) => h('option', { value: o.id }, o.label)));
+  // Switching lottery opens the game you last looked at there, or its first game.
+  select.addEventListener('change', () => {
+    const op = OPERATORS.find((o) => o.id === select.value);
+    const saved = store(`game:${op.id}`);
+    location.hash = op.games.includes(saved) ? saved : op.games[0];
+  });
+}
+
+function updateNav(id) {
+  const op = operatorOf(id);
+  $('#operator').value = op.id;
+  $('#tabs').replaceChildren(...op.games.map((g) => h('a', { href: `#${g}`, 'data-game': g, 'aria-current': g === id ? 'page' : null }, GAMES[g].name)));
+  renderFooter(op);
 }
 
 async function show(id) {
   state.id = id;
-  updateTabs(id);
+  updateNav(id);
   hideTip();
   document.body.classList.add('busy');
   try {
@@ -805,6 +882,7 @@ async function show(id) {
     const updated = $('#updated');
     if (updated) updated.textContent = `${ctx.game.name} results up to ${fmtDate(ctx.lastDate, 'long')}.`;
     store('game', id);
+    store(`game:${ctx.op.id}`, id);
   } catch (err) {
     console.error(err);
     renderError(err);
@@ -838,6 +916,7 @@ function initTheme() {
 
 async function init() {
   initTheme();
+  initNav();
   try {
     state.latest = await getJson('data/latest.json');
   } catch (err) {

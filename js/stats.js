@@ -16,18 +16,23 @@ export const hyper = (N, K, pool, j) => (C(pool, j) * C(N - pool, K - j)) / C(N,
 /** Number of rounds a single line plays on a draw night. */
 export const roundsOn = (game, date) => (game.twoRoundsSince && date >= game.twoRoundsSince ? 2 : 1);
 
+/** Does the game have an "m + Bonus Ball" prize tier? */
+const hasBonusTier = (game, m) => game.tiers.some(([tm, tb]) => tm === m && tb === 'bonus');
+
 /** Per-round chance of each prize tier for one line. */
 export function tierProbabilities(game, fmt) {
   const { count: K, max: N } = fmt.main;
   const { count: Kb, max: Nb } = fmt.bonus;
-  const total = C(N, K);
   return game.tiers.map(([m, b]) => {
-    if (game.id === 'lotto') {
-      if (m === 5 && b === 'bonus') return C(K, 5) / total; // the sixth pick is the Bonus Ball
-      if (m === 5) return (C(K, 5) * (N - K - 1)) / total; // ...and here it is not
-      return (C(K, m) * C(N - K, K - m)) / total;
+    const pMain = hyper(N, K, K, m);
+    if (!game.bonus.picked) {
+      // The Bonus Ball comes from the N - K numbers left in the drum, so it lands on one of the line's
+      // K - m unmatched numbers with chance (K - m) / (N - K).
+      const hit = (K - m) / (N - K);
+      if (b === 'bonus') return pMain * hit;
+      return hasBonusTier(game, m) ? pMain * (1 - hit) : pMain;
     }
-    return hyper(N, K, K, m) * hyper(Nb, Kb, Kb, b);
+    return pMain * hyper(Nb, Kb, Kb, b);
   });
 }
 
@@ -38,10 +43,12 @@ export const overRounds = (p, r) => (r === 1 ? p : -Math.expm1(r * Math.log1p(-p
 export function classify(game, pick, draw) {
   let m = 0;
   for (const n of pick.main) if (draw.main.includes(n)) m++;
-  if (game.id === 'lotto') {
+  if (!game.bonus.picked) {
+    // "m + Bonus Ball" tiers come before plain "m" tiers in the prize table, so a line that also
+    // matched the Bonus Ball finds the bonus tier first.
     const bonusHit = pick.main.includes(draw.bonus[0]);
     const tier = game.tiers.findIndex(([tm, tb]) => tm === m && (tb !== 'bonus' || bonusHit));
-    return { tier, m, b: m === 5 && bonusHit ? 1 : 0 };
+    return { tier, m, b: bonusHit && hasBonusTier(game, m) ? 1 : 0 };
   }
   let b = 0;
   for (const n of pick.bonus) if (draw.bonus.includes(n)) b++;

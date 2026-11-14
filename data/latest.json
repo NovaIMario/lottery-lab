@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-14T17:32:27.441Z",
+  "updated": "2026-11-14T19:00:27.740Z",
   "games": {
     "euromillions": {
       "drawNumber": 1998,
@@ -322,6 +322,184 @@
       ],
       "nextDraw": "2026-11-16",
       "nextJackpot": "£10,000 every month for 30 years"
+    },
+    "irish-lotto": {
+      "date": "2026-11-11",
+      "confirmed": true,
+      "jackpotWinners": 0,
+      "tiers": [
+        {
+          "match": [
+            6,
+            0
+          ],
+          "winners": 0,
+          "each": 2379926
+        },
+        {
+          "match": [
+            5,
+            1
+          ],
+          "winners": 1,
+          "each": 128505
+        },
+        {
+          "match": [
+            5,
+            0
+          ],
+          "winners": 13,
+          "each": 1260
+        },
+        {
+          "match": [
+            4,
+            1
+          ],
+          "winners": 27,
+          "each": 153
+        },
+        {
+          "match": [
+            4,
+            0
+          ],
+          "winners": 595,
+          "each": 42
+        },
+        {
+          "match": [
+            3,
+            1
+          ],
+          "winners": 880,
+          "each": 19
+        },
+        {
+          "match": [
+            2,
+            1
+          ],
+          "winners": 7838,
+          "each": 4
+        },
+        {
+          "match": [
+            3,
+            0
+          ],
+          "winners": 9891,
+          "each": 4
+        }
+      ],
+      "jackpot": "€2,379,926",
+      "nextJackpot": "€2,800,000"
+    },
+    "eurojackpot": {
+      "date": "2026-11-13",
+      "confirmed": true,
+      "jackpotWinners": 0,
+      "tiers": [
+        {
+          "match": [
+            5,
+            2
+          ],
+          "winners": 0,
+          "each": 66088012.96
+        },
+        {
+          "match": [
+            5,
+            1
+          ],
+          "winners": 7,
+          "each": 353606.7
+        },
+        {
+          "match": [
+            5,
+            0
+          ],
+          "winners": 27,
+          "each": 51700.9
+        },
+        {
+          "match": [
+            4,
+            2
+          ],
+          "winners": 44,
+          "each": 5233
+        },
+        {
+          "match": [
+            4,
+            1
+          ],
+          "winners": 1103,
+          "each": 260.9
+        },
+        {
+          "match": [
+            3,
+            2
+          ],
+          "winners": 1783,
+          "each": 177.5
+        },
+        {
+          "match": [
+            4,
+            0
+          ],
+          "winners": 2838,
+          "each": 81.1
+        },
+        {
+          "match": [
+            2,
+            2
+          ],
+          "winners": 24161,
+          "each": 30.3
+        },
+        {
+          "match": [
+            3,
+            1
+          ],
+          "winners": 43461,
+          "each": 18.8
+        },
+        {
+          "match": [
+            3,
+            0
+          ],
+          "winners": 106941,
+          "each": 15.2
+        },
+        {
+          "match": [
+            1,
+            2
+          ],
+          "winners": 122724,
+          "each": 15.2
+        },
+        {
+          "match": [
+            2,
+            1
+          ],
+          "winners": 584547,
+          "each": 9.9
+        }
+      ],
+      "jackpot": "€66,088,013",
+      "nextJackpot": "€75 Million"
     }
   }
 }

@@ -2,12 +2,16 @@
 /**
  * Lottery Lab data updater.
  *
- *   node scripts/update.mjs          refresh: this year's archives plus the official latest-draw feeds
- *   node scripts/update.mjs --seed   rebuild: every yearly archive since each game's current format began
+ *   node scripts/update.mjs              refresh: this year's results plus the latest-draw details
+ *   node scripts/update.mjs --seed       rebuild: every result since each game's current format began
+ *   node scripts/update.mjs --only=a,b   limit the run to some games (ids as in data/<id>.json)
  *
- * Two public sources:
- *   - lottery.co.uk yearly results archives: draw dates, numbers and jackpots
- *   - The National Lottery's latest-draw XML feed: prize breakdown, next draw date and next jackpot
+ * Public sources:
+ *   - lottery.co.uk yearly archives: The National Lottery's games and the Health Lottery
+ *   - The National Lottery's latest-draw XML feeds: prize breakdown, next draw date and next jackpot
+ *   - irishlottery.com yearly archives and draw pages: Irish Lotto results and prize breakdowns
+ *   - euro-jackpot.net yearly archives and draw pages: Eurojackpot results and prize breakdowns
+ *   - New York State open data (data.ny.gov): the official Powerball and Mega Millions numbers
  *
  * Writes data/<game>.json and data/latest.json, and rewrites a file only when its content changed.
  * A failed request never deletes data: the existing files are kept and a warning is printed.
@@ -21,32 +25,65 @@ const DATA_DIR = path.join(ROOT, 'data');
 const UA = 'Mozilla/5.0 (compatible; lottery-results-bot/1.0)';
 const DELAY_MS = 1500; // between requests, to stay polite
 const SEED = process.argv.includes('--seed');
+const ONLY = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7).split(',').filter(Boolean);
 const IN_CI = Boolean(process.env.GITHUB_ACTIONS);
 
-// Each game's current format. Older draws used different number ranges, so they are left out.
+// Each game's current format. Older draws used different number ranges or rules, so they are left out.
+// `sameDrum`: the bonus ball comes out of the main drum after the main numbers, and players don't pick it.
 const GAMES = [
+  // The National Lottery (UK)
   {
-    id: 'euromillions', name: 'EuroMillions', since: '2016-09-27',
+    id: 'euromillions', name: 'EuroMillions', since: '2016-09-27', source: 'lottery.co.uk', latest: 'national-lottery',
     main: { cls: 'euromillions-ball', count: 5, max: 50 },
     bonus: { cls: 'euromillions-lucky-star', count: 2, max: 12, name: 'Lucky Stars' },
     jackpotColumn: true,
   },
   {
-    id: 'lotto', name: 'Lotto', since: '2015-10-10',
+    id: 'lotto', name: 'Lotto', since: '2015-10-10', source: 'lottery.co.uk', latest: 'national-lottery',
     main: { cls: 'lotto-ball', count: 6, max: 59 },
-    // The bonus ball comes out of the same drum, after the six main numbers.
     bonus: { cls: 'lotto-bonus-ball', count: 1, max: 59, name: 'Bonus Ball', sameDrum: true },
     jackpotColumn: true,
   },
   {
-    id: 'thunderball', name: 'Thunderball', since: '2010-05-12',
+    id: 'thunderball', name: 'Thunderball', since: '2010-05-12', source: 'lottery.co.uk', latest: 'national-lottery',
     main: { cls: 'thunderball-ball', count: 5, max: 39 },
     bonus: { cls: 'thunderball-thunderball', count: 1, max: 14, name: 'Thunderball' },
   },
   {
-    id: 'set-for-life', name: 'Set For Life', since: '2019-03-18',
+    id: 'set-for-life', name: 'Set For Life', since: '2019-03-18', source: 'lottery.co.uk', latest: 'national-lottery',
     main: { cls: 'setForLife-ball', count: 5, max: 47 },
     bonus: { cls: 'setForLife-life-ball', count: 1, max: 10, name: 'Life Ball' },
+  },
+  // The Health Lottery (UK). Its Bonus Ball began on 11 May 2013.
+  {
+    id: 'health-lottery', name: 'Health Lottery', since: '2013-05-11', source: 'lottery.co.uk',
+    main: { cls: 'health-ball', count: 5, max: 50 },
+    bonus: { cls: 'health-bonus-ball', count: 1, max: 50, name: 'Bonus Ball', sameDrum: true },
+  },
+  // Irish National Lottery. 6 from 47 since 5 September 2015. Lotto Plus 1 and 2 are separate add-on draws.
+  {
+    id: 'irish-lotto', name: 'Irish Lotto', since: '2015-09-05', source: 'irishlottery.com', latest: 'irishlottery.com',
+    main: { count: 6, max: 47 },
+    bonus: { count: 1, max: 47, name: 'Bonus Ball', sameDrum: true },
+  },
+  // Eurojackpot. Euro Numbers went from 1-10 to 1-12 on 25 March 2022, when the Tuesday draw began.
+  {
+    id: 'eurojackpot', name: 'Eurojackpot', since: '2022-03-25', source: 'euro-jackpot.net', latest: 'euro-jackpot.net',
+    main: { count: 5, max: 50 },
+    bonus: { count: 2, max: 12, name: 'Euro Numbers' },
+  },
+  // US multi-state games, from the New York Lottery's datasets on data.ny.gov.
+  // Powerball has been 5 from 69 plus 1 from 26 since 7 October 2015; its sixth number is the Powerball.
+  {
+    id: 'powerball', name: 'Powerball', since: '2015-10-07', source: 'data.ny.gov', dataset: 'd6yy-54nr',
+    main: { count: 5, max: 69 },
+    bonus: { count: 1, max: 26, name: 'Powerball' },
+  },
+  // Mega Millions became 5 from 70 plus a Mega Ball from 1 to 24 on 8 April 2025.
+  {
+    id: 'mega-millions', name: 'Mega Millions', since: '2025-04-08', source: 'data.ny.gov', dataset: '5xaw-6ayf', bonusField: 'mega_ball',
+    main: { count: 5, max: 70 },
+    bonus: { count: 1, max: 24, name: 'Mega Ball' },
   },
 ];
 
@@ -65,7 +102,7 @@ async function get(url) {
     lastRequest = Date.now();
     try {
       const res = await fetch(url, {
-        headers: { 'User-Agent': UA, Accept: 'text/html,application/xml;q=0.9,*/*;q=0.8' },
+        headers: { 'User-Agent': UA, Accept: 'text/html,application/xml,application/json;q=0.9,*/*;q=0.8' },
         signal: AbortSignal.timeout(30_000),
       });
       if (res.ok) return await res.text();
@@ -79,11 +116,17 @@ async function get(url) {
   }
 }
 
-// ---------------------------------------------------------------- parsing
+// ---------------------------------------------------------------- parsing helpers
 
 const decode = (s) => s
-  .replace(/&pound;/g, '£').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
+  .replace(/&pound;/g, '£').replace(/&euro;/g, '€').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
   .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n));
+const cellText = (html) => decode(html.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+const toInt = (s) => (/^[\d,]+$/.test(s) ? Number(s.replace(/,/g, '')) : null);
+/** "€1,260.00" -> 1260; anything that isn't just an amount -> null. */
+const toAmount = (s) => { const m = s.match(/^[£€$]\s*([\d,]+(?:\.\d+)?)$/); return m ? Number(m[1].replace(/,/g, '')) : null; };
+const wholeMoney = (n, symbol) => `${symbol}${Math.round(n).toLocaleString('en-GB')}`;
+const dmy = (iso) => iso.split('-').reverse().join('-');
 
 function isValid(entry, game) {
   const okSet = (nums, spec) => nums.length === spec.count
@@ -106,8 +149,15 @@ function normalize(d) {
   return out;
 }
 
-/** Parse one lottery.co.uk yearly archive page into draw entries (one per round). */
-function parseArchive(html, game) {
+function addEntry(entries, game, entry) {
+  if (isValid(entry, game)) entries.push(normalize(entry));
+  else warn(`${game.id} ${entry.date}: skipped a draw that did not match the game format (${JSON.stringify({ main: entry.main, bonus: entry.bonus })})`);
+}
+
+// ---------------------------------------------------------------- yearly archives
+
+/** lottery.co.uk: one <tr> per draw night, balls as <div class="result small lotto-ball">7</div>. */
+function parseLotteryCoUk(html, game) {
   const entries = [];
   let rows = 0;
   for (const row of html.split(/<tr[\s>]/).slice(1)) {
@@ -117,8 +167,7 @@ function parseArchive(html, game) {
     const date = `${dm[3]}-${dm[2]}-${dm[1]}`;
     if (date < game.since) continue;
 
-    // Balls look like <div class="result small lotto-ball">7</div>; since June 2026 the Lotto has
-    // two rounds a night, marked with a -round-N suffix (lotto-ball-round-2).
+    // Since June 2026 the Lotto has two rounds a night, marked with a -round-N suffix (lotto-ball-round-2).
     const rounds = [];
     for (const m of row.matchAll(/class="result small ([^"]+)"[^>]*>\s*(\d+)\s*</g)) {
       const [, base, round] = m[1].split(/\s+/)[0].match(/^(.*?)(?:-round-(\d+))?$/);
@@ -141,12 +190,70 @@ function parseArchive(html, game) {
         if (/Rolled/i.test(lastCell)) entry.rollover = true;
         if (/Roll\s*Down/i.test(lastCell)) entry.rolldown = true;
       }
-      if (isValid(entry, game)) entries.push(normalize(entry));
-      else warn(`${game.id} ${date}: skipped a row that did not match the game format (${JSON.stringify(r)})`);
+      addEntry(entries, game, entry);
     });
   }
   return { entries, rows };
 }
+
+/** irishlottery.com: each row holds the main draw plus Lotto Plus 1 and Plus 2; only the main draw counts. */
+function parseIrishLottery(html, game) {
+  const entries = [];
+  let rows = 0;
+  for (const row of html.split(/<tr[\s>]/).slice(1)) {
+    const dm = row.match(/irish-lotto-result-(\d{2})-(\d{2})-(\d{4})"/);
+    if (!dm) continue;
+    rows++;
+    const date = `${dm[3]}-${dm[2]}-${dm[1]}`;
+    if (date < game.since) continue;
+    const cell = (row.match(/id="maindrawBody"[^>]*>([\s\S]*?)<\/td>/) || [])[1] || '';
+    const nums = (kind) => [...cell.matchAll(new RegExp(`class="myBall ${kind}\\b[^"]*"[^>]*>\\s*(\\d+)\\s*<`, 'g'))].map((m) => Number(m[1]));
+    addEntry(entries, game, { date, main: nums('ball'), bonus: nums('bonus-ball') });
+  }
+  return { entries, rows };
+}
+
+/** euro-jackpot.net: one row per draw, <li class="ball"> for the main numbers and <li class="euro"> for Euro Numbers. */
+function parseEuroJackpot(html, game) {
+  const entries = [];
+  let rows = 0;
+  for (const row of html.split(/<tr[\s>]/).slice(1)) {
+    const dm = row.match(/href="\/results\/(\d{2})-(\d{2})-(\d{4})"/);
+    if (!dm) continue;
+    rows++;
+    const date = `${dm[3]}-${dm[2]}-${dm[1]}`;
+    if (date < game.since) continue;
+    const nums = (cls) => [...row.matchAll(new RegExp(`<li class="${cls}"[^>]*>\\s*(?:<span>)?\\s*(\\d+)`, 'g'))].map((m) => Number(m[1]));
+    addEntry(entries, game, { date, main: nums('ball'), bonus: nums('euro') });
+  }
+  return { entries, rows };
+}
+
+const ARCHIVES = {
+  'lottery.co.uk': { url: (game, y) => `https://www.lottery.co.uk/${game.id}/results/archive-${y}`, parse: parseLotteryCoUk },
+  'irishlottery.com': { url: (game, y) => `https://www.irishlottery.com/archive-${y}`, parse: parseIrishLottery },
+  'euro-jackpot.net': { url: (game, y) => `https://www.euro-jackpot.net/results-archive-${y}`, parse: parseEuroJackpot },
+};
+
+/** data.ny.gov (Socrata): every draw since `from` in one request. */
+async function fetchNyOpenData(game, from) {
+  const where = encodeURIComponent(`draw_date >= '${from}T00:00:00'`);
+  const url = `https://data.ny.gov/resource/${game.dataset}.json?$where=${where}&$order=draw_date%20DESC&$limit=50000`;
+  const rows = JSON.parse(await get(url));
+  if (!Array.isArray(rows)) throw new Error(`${url} -> unexpected response`);
+  const entries = [];
+  for (const r of rows) {
+    const date = String(r.draw_date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < game.since) continue;
+    const nums = String(r.winning_numbers || '').trim().split(/\s+/).map(Number);
+    addEntry(entries, game, game.bonusField
+      ? { date, main: nums, bonus: [Number(r[game.bonusField])] }
+      : { date, main: nums.slice(0, game.main.count), bonus: nums.slice(game.main.count) });
+  }
+  return entries;
+}
+
+// ---------------------------------------------------------------- latest-draw details
 
 const tagRe = (name, flags = '') => new RegExp(`<${name}((?:\\s[^>]*)?)>([\\s\\S]*?)</${name}>`, flags);
 const tag = (xml, name) => { const m = xml.match(tagRe(name)); return m ? m[2].trim() : null; };
@@ -154,8 +261,8 @@ const tags = (xml, name) => [...xml.matchAll(tagRe(name, 'g'))].map((m) => ({ at
 const attr = (attrs, name) => (attrs.match(new RegExp(`${name}="([^"]*)"`)) || [])[1];
 const money = (s) => (s == null ? null : /^\d/.test(s) ? `£${s}` : decode(s));
 
-/** Parse the official latest-draw XML: numbers, prize breakdown and next-draw details. */
-function parseLatestXml(xml, game) {
+/** The National Lottery's latest-draw XML: numbers, prize breakdown and next-draw details. */
+function parseNationalLotteryXml(xml, game) {
   const date = tag(xml, 'draw-date');
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('no draw date in feed');
   const rounds = tags(xml, 'balls').map(({ body }) => ({
@@ -200,6 +307,67 @@ function parseLatestXml(xml, game) {
   return latest;
 }
 
+/**
+ * A draw page's prize table, as tiers keyed by what they match: { match: [main, bonus], winners, each }.
+ * The page shows its own figures; tiers the page holds that the game doesn't use are ignored by the site.
+ */
+function finishTiers(tiers, game, date) {
+  if (!tiers.length) throw new Error(`no prize table on the ${date} draw page`);
+  const top = tiers.find((t) => t.match[0] === game.main.count && (game.bonus.sameDrum || t.match[1] === game.bonus.count));
+  return { top, tiers };
+}
+
+/** irishlottery.com draw page: the first table is the main draw (rows carry data-main and data-bonus). */
+function parseIrishDraw(html, game, date) {
+  const table = html.split('</table>').find((t) => /<tr data-main="\d"/.test(t)) || '';
+  const tiers = [];
+  for (const m of table.matchAll(/<tr data-main="(\d+)" data-bonus="(\d+)">([\s\S]*?)<\/tr>/g)) {
+    const cell = (title) => cellText((m[3].match(new RegExp(`data-title="${title}"[^>]*>([\\s\\S]*?)</td>`)) || [])[1] || '');
+    const winners = toInt(cell('Winners').replace(/\s*Rollover$/i, ''));
+    if (winners == null) continue;
+    const prize = cell('Prize Amount');
+    const each = toAmount(prize);
+    tiers.push({ match: [Number(m[1]), Number(m[2])], winners, ...(each != null ? { each } : prize ? { text: prize } : {}) });
+  }
+  const { top } = finishTiers(tiers, game, date);
+  const next = cellText((html.match(/Next Estimated Jackpot<\/span>([^<]*)</) || [])[1] || '');
+  const latest = { date, confirmed: true, jackpotWinners: top?.winners ?? 0, tiers };
+  if (top?.each) latest.jackpot = wholeMoney(top.each, '€');
+  if (/^€\s*[\d,.]+(?:\s*(?:Million|M))?$/i.test(next)) latest.nextJackpot = next;
+  return latest;
+}
+
+/** euro-jackpot.net draw page: the first prize table covers every country. */
+function parseEuroJackpotDraw(html, game, date) {
+  const start = html.indexOf('Prize Per Winner');
+  const table = start >= 0 ? html.slice(start, html.indexOf('</table>', start)) : '';
+  const tiers = [];
+  for (const m of table.matchAll(/<tr>([\s\S]*?)<\/tr>/g)) {
+    const cells = m[1].split('</td>').map(cellText);
+    const label = (cells[0] || '').match(/^Match (\d)(?: and (\d) Euro Numbers?)?$/i);
+    if (!label) continue; // totals, and tiers marked † that only some countries pay
+    const winners = toInt(cells[2] || '');
+    if (winners == null) continue;
+    const each = toAmount(cells[1] || '');
+    tiers.push({ match: [Number(label[1]), Number(label[2] || 0)], winners, ...(each != null ? { each } : {}) });
+  }
+  const { top } = finishTiers(tiers, game, date);
+  const box = (cls) => cellText((html.match(new RegExp(`class="box ${cls}[^"]*">[\\s\\S]*?class="elem2">([^<]*)<`)) || [])[1] || '');
+  const jackpot = box('jackpot-amount');
+  const jackpotWinners = toInt(box('winners'));
+  const next = cellText((html.match(/data-banner="jackpot"[^>]*>\s*<div>Next Jackpot<\/div>\s*<div[^>]*>([^<]*)</) || [])[1] || '');
+  const latest = { date, confirmed: true, jackpotWinners: jackpotWinners ?? top?.winners ?? 0, tiers };
+  if (toAmount(jackpot) != null) latest.jackpot = wholeMoney(toAmount(jackpot), '€');
+  else if (top?.each) latest.jackpot = wholeMoney(top.each, '€');
+  if (/^€\s*[\d,.]+(?:\s*(?:Million|M))?$/i.test(next)) latest.nextJackpot = next;
+  return latest;
+}
+
+const DRAW_PAGES = {
+  'irishlottery.com': { url: (date) => `https://www.irishlottery.com/results/irish-lotto-result-${dmy(date)}`, parse: parseIrishDraw },
+  'euro-jackpot.net': { url: (date) => `https://www.euro-jackpot.net/results/${dmy(date)}`, parse: parseEuroJackpotDraw },
+};
+
 // ---------------------------------------------------------------- files
 
 async function readJson(file, fallback) {
@@ -220,18 +388,30 @@ function merge(existing, incoming) {
   return [...map.values()].sort((a, b) => (a.date === b.date ? (a.round || 1) - (b.round || 1) : a.date < b.date ? 1 : -1));
 }
 
+const daysBetween = (a, b) => Math.round((new Date(`${b}T12:00:00Z`) - new Date(`${a}T12:00:00Z`)) / 864e5);
+
 // ---------------------------------------------------------------- main
 
 async function main() {
   await mkdir(DATA_DIR, { recursive: true });
+  const unknown = ONLY.filter((id) => !GAMES.some((g) => g.id === id));
+  if (unknown.length) throw new Error(`unknown game id(s): ${unknown.join(', ')}`);
+  const games = ONLY.length ? GAMES.filter((g) => ONLY.includes(g.id)) : GAMES;
+
   const now = new Date();
+  const today = now.toISOString().slice(0, 10);
   const year = now.getUTCFullYear();
   const latestFile = path.join(DATA_DIR, 'latest.json');
   const latestDoc = await readJson(latestFile, { updated: null, games: {} });
   const latestGames = { ...latestDoc.games };
   let latestChanged = false;
+  const setLatest = (id, latest) => {
+    if (JSON.stringify(latestGames[id]) === JSON.stringify(latest)) return;
+    latestGames[id] = latest;
+    latestChanged = true;
+  };
 
-  for (const game of GAMES) {
+  for (const game of games) {
     const file = path.join(DATA_DIR, `${game.id}.json`);
     const doc = await readJson(file, null);
     const seedThis = SEED || !doc?.draws?.length;
@@ -245,33 +425,43 @@ async function main() {
     }
 
     let incoming = [];
-    for (const y of years) {
-      const url = `https://www.lottery.co.uk/${game.id}/results/archive-${y}`;
+    if (game.source === 'data.ny.gov') {
+      const from = seedThis ? game.since : `${years[0]}-01-01`;
       try {
-        const { entries, rows } = parseArchive(await get(url), game);
-        if (!rows && y < year) warn(`${game.id} ${y}: archive page had no result rows (layout change?)`);
-        incoming = incoming.concat(entries);
-        console.log(`${game.id} ${y}: ${entries.length} draws`);
+        incoming = await fetchNyOpenData(game, from);
+        console.log(`${game.id} since ${from}: ${incoming.length} draws`);
       } catch (err) {
-        warn(`${game.id} ${y}: ${err.message}`);
+        warn(`${game.id}: ${err.message}`);
+      }
+    } else {
+      const archive = ARCHIVES[game.source];
+      for (const y of years) {
+        const url = archive.url(game, y);
+        try {
+          const { entries, rows } = archive.parse(await get(url), game);
+          if (!rows && y < year) warn(`${game.id} ${y}: archive page had no result rows (layout change?)`);
+          incoming = incoming.concat(entries);
+          console.log(`${game.id} ${y}: ${entries.length} draws`);
+        } catch (err) {
+          warn(`${game.id} ${y}: ${err.message}`);
+        }
       }
     }
 
-    try {
-      const xml = await get(`https://www.national-lottery.co.uk/results/${game.id}/draw-history/xml`);
-      const latest = parseLatestXml(xml, game);
-      if (latest.date >= game.since) {
-        latest.rounds.forEach((r, i) => incoming.push(normalize({
-          date: latest.date, ...(latest.rounds.length > 1 ? { round: i + 1 } : {}), main: r.main, bonus: r.bonus,
-        })));
+    if (game.latest === 'national-lottery') {
+      try {
+        const xml = await get(`https://www.national-lottery.co.uk/results/${game.id}/draw-history/xml`);
+        const latest = parseNationalLotteryXml(xml, game);
+        if (latest.date >= game.since) {
+          latest.rounds.forEach((r, i) => incoming.push(normalize({
+            date: latest.date, ...(latest.rounds.length > 1 ? { round: i + 1 } : {}), main: r.main, bonus: r.bonus,
+          })));
+        }
+        setLatest(game.id, latest);
+        console.log(`${game.id}: latest draw ${latest.date}, next ${latest.nextDraw ?? '?'}`);
+      } catch (err) {
+        warn(`${game.id} latest-draw feed: ${err.message}`);
       }
-      if (JSON.stringify(latestGames[game.id]) !== JSON.stringify(latest)) {
-        latestGames[game.id] = latest;
-        latestChanged = true;
-      }
-      console.log(`${game.id}: latest draw ${latest.date}, next ${latest.nextDraw ?? '?'}`);
-    } catch (err) {
-      warn(`${game.id} latest-draw feed: ${err.message}`);
     }
 
     // Merging never drops a draw collected earlier; fresh data replaces older copies of the same draw.
@@ -279,6 +469,20 @@ async function main() {
     const oldDraws = (doc?.draws ?? []).filter((d) => d.date >= game.since && isValid(d, game));
     const finalDraws = merge(oldDraws, incoming);
     if (!finalDraws.length) { warn(`${game.id}: no draws available, file left unchanged`); continue; }
+
+    // Prize breakdown for the newest draw, from its own page. Re-read for two days after a draw,
+    // while late figures can still change; after that, only when a newer draw appears.
+    const page = DRAW_PAGES[game.latest];
+    const newest = finalDraws[0].date;
+    if (page && (latestGames[game.id]?.date !== newest || daysBetween(newest, today) <= 2)) {
+      try {
+        const latest = page.parse(await get(page.url(newest)), game, newest);
+        setLatest(game.id, latest);
+        console.log(`${game.id}: prize breakdown for ${newest}, ${latest.tiers.length} tiers`);
+      } catch (err) {
+        warn(`${game.id} draw page: ${err.message}`);
+      }
+    }
 
     const format = {
       since: game.since,

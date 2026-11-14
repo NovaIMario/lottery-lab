@@ -2,10 +2,12 @@ name: Update results and deploy
 
 on:
   schedule:
-    # Draws end between about 8 and 9pm UK time. The late run picks up same-night results;
-    # the morning run catches anything published late and the confirmed prize breakdowns.
+    # UK, Irish and European draws end by about 9pm UK time. The late run picks up same-night results;
+    # the morning run catches anything published late and the confirmed prize breakdowns; the midday
+    # run collects the US draws from the night before once New York has published them.
     - cron: '35 22 * * *'
     - cron: '15 7 * * *'
+    - cron: '20 12 * * *'
   push:
     branches: [main]
   workflow_dispatch:
