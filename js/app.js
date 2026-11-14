@@ -250,6 +250,10 @@ function pickCard(ctx, st, pick) {
   const text = strategyText(ctx, st);
   let { desc } = text;
   if (st.id === 'unpopular') desc += game.sharedJackpot ? T.unpopularShared : T.unpopularFixed(game.name);
+  if (st.id === 'rl' && pick.beliefs) {
+    const b = pick.beliefs;
+    desc += T.rlBeliefs(fmtInt(b.plays), fmtPct(b.lo), fmtPct(b.hi), fmtPct(b.chance));
+  }
   const card = h('article', { class: 'card pick', 'data-strategy': st.id },
     h('header', null, h('h3', null, text.name), h('span', { class: 'chip' }, text.tag)),
     balls(pick.main, pick.bonus, { size: 'md', bonusName: ctx.bonus.many }),
@@ -274,12 +278,13 @@ function pickCard(ctx, st, pick) {
 
 function renderPicks(ctx) {
   const { game, fmt } = ctx;
+  const { tested } = ctx.backtest; // the backtest runs first and leaves the trained state for currentPicks
   const picks = S.currentPicks(game, fmt, ctx.chrono, ctx.next, state.salt);
   const shared = game.sharedJackpot;
   sec.picks.replaceChildren(
     h('div', { class: 'section-head' },
       h('h2', null, T.picksTitle(fmtDate(ctx.next, 'day'))),
-      h('p', { class: 'lede' }, T.picksLede(game.name, fmtInt(ctx.backtest.tested)))),
+      h('p', { class: 'lede' }, T.picksLede(game.name, fmtInt(tested)))),
     h('div', { class: 'pick-grid' }, S.STRATEGIES.map((st) => pickCard(ctx, st, picks[st.id]))),
     h('aside', { class: 'callout' },
       h('h3', null, T.edgeTitle(shared)),

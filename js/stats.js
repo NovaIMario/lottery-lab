@@ -169,6 +169,7 @@ export const WINDOW = 50;
 
 // Names and descriptions are in i18n.js. `random` marks the methods that can be re-rolled.
 export const STRATEGIES = [
+  { id: 'rl', random: true },
   { id: 'hot' },
   { id: 'cold' },
   { id: 'overdue' },
@@ -226,18 +227,109 @@ function unpopularLine(fmt, rand) {
   return weightedSample(N, K, unpopularWeight, rand);
 }
 
-/** Running state used to build picks from the draws seen so far (oldest first). */
-export function newState(fmt) {
+// ---------------------------------------------------------------- reinforcement learning
+
+// The RL agent is a Thompson-sampling bandit. Each number is an arm with a Beta belief about how often
+// it's drawn, starting from Beta(1, 1): no opinion. Before every draw the agent samples a rate for each
+// number from its beliefs and plays the numbers with the highest samples. Its reward is 1 for each of
+// those numbers that comes up and 0 for each that doesn't, and only the numbers it played are updated,
+// so it learns from its own choices. The sampling keeps it exploring numbers it's unsure about.
+
+function normal(rand) {
+  let u = 0;
+  while (u === 0) u = rand();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand());
+}
+
+/** Gamma(shape) for shape >= 1, by Marsaglia and Tsang's method. */
+function gamma(shape, rand) {
+  const d = shape - 1 / 3;
+  const c = 1 / Math.sqrt(9 * d);
+  for (;;) {
+    let x;
+    let v;
+    do {
+      x = normal(rand);
+      v = 1 + c * x;
+    } while (v <= 0);
+    v = v * v * v;
+    const u = rand();
+    if (u < 1 - 0.0331 * x ** 4 || Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
+  }
+}
+
+function betaSample(a, b, rand) {
+  const x = gamma(a, rand);
+  return x / (x + gamma(b, rand));
+}
+
+const newArms = (max) => ({ hit: new Float64Array(max + 1).fill(1), miss: new Float64Array(max + 1).fill(1) });
+
+function thompson(arms, max, k, rand) {
+  if (!k) return [];
+  const scored = [];
+  for (let n = 1; n <= max; n++) scored.push([n, betaSample(arms.hit[n], arms.miss[n], rand)]);
+  return scored.sort((x, y) => y[1] - x[1]).slice(0, k).map(([n]) => n).sort(asc);
+}
+
+function rlLine(game, fmt, s, rand) {
+  return {
+    main: thompson(s.rl.main, fmt.main.max, fmt.main.count, rand),
+    bonus: thompson(s.rl.bonus, fmt.bonus.max, game.bonus.picked ? fmt.bonus.count : 0, rand),
+  };
+}
+
+/** The line the agent plays in draw `d`, chosen before it sees the result. The backtest scores this line. */
+function rlPlay(s, d) {
+  const { game, fmt } = s.rl;
+  if (s.rl.played?.draw !== d) {
+    const rand = rng(hashString(`${game.id}|rl|${d.date}|${d.round || 1}`));
+    s.rl.played = { draw: d, line: rlLine(game, fmt, s, rand) };
+  }
+  return s.rl.played.line;
+}
+
+/** After draw `d`, the agent collects its reward for the line it played and updates its beliefs. */
+function rlStep(s, d) {
+  const line = rlPlay(s, d);
+  for (const [arms, played, drawn] of [[s.rl.main, line.main, d.main], [s.rl.bonus, line.bonus, d.bonus]]) {
+    for (const n of played) {
+      if (drawn.includes(n)) arms.hit[n]++;
+      else arms.miss[n]++;
+    }
+  }
+  s.rl.plays++;
+}
+
+/** The agent's current estimate of each main number's chance of being drawn: the mean of its belief. */
+function rlBeliefs(fmt, s) {
+  const { hit, miss } = s.rl.main;
+  let lo = 1;
+  let hi = 0;
+  for (let n = 1; n <= fmt.main.max; n++) {
+    const p = hit[n] / (hit[n] + miss[n]);
+    lo = Math.min(lo, p);
+    hi = Math.max(hi, p);
+  }
+  return { lo, hi, chance: fmt.main.count / fmt.main.max, plays: s.rl.plays };
+}
+
+// ---------------------------------------------------------------- picks
+
+/** Running state used to build picks from the draws seen so far (oldest first). Pass `game` to train the RL agent too. */
+export function newState(fmt, game = null) {
   return {
     count: new Int32Array(fmt.main.max + 1),
     bcount: new Int32Array(fmt.bonus.max + 1),
     last: new Int32Array(fmt.main.max + 1).fill(-1),
     blast: new Int32Array(fmt.bonus.max + 1).fill(-1),
+    rl: game ? { game, fmt, main: newArms(fmt.main.max), bonus: newArms(fmt.bonus.max), plays: 0 } : null,
   };
 }
 
 export function pushDraw(state, chrono, t, window = WINDOW) {
   const d = chrono[t];
+  if (state.rl) rlStep(state, d);
   for (const n of d.main) { state.count[n]++; state.last[n] = t; }
   for (const n of d.bonus) { state.bcount[n]++; state.blast[n] = t; }
   const old = chrono[t - window];
@@ -260,6 +352,8 @@ export function makePick(id, game, fmt, s, rand) {
   const Kb = game.bonus.picked ? fmt.bonus.count : 0;
   const Nb = fmt.bonus.max;
   switch (id) {
+    case 'rl':
+      return { ...rlLine(game, fmt, s, rand), beliefs: rlBeliefs(fmt, s) };
     case 'hot':
       return { main: ranked(N, byHot(s.count, s.last), K), bonus: ranked(Nb, byHot(s.bcount, s.blast), Kb) };
     case 'cold':
@@ -275,10 +369,22 @@ export function makePick(id, game, fmt, s, rand) {
   }
 }
 
+// State after every draw in a history, so picks and re-rolls don't replay it. The backtest fills it in passing.
+const trained = new WeakMap();
+
+function trainedState(game, fmt, chrono) {
+  let s = trained.get(chrono);
+  if (!s) {
+    s = newState(fmt, game);
+    for (let t = 0; t < chrono.length; t++) pushDraw(s, chrono, t);
+    trained.set(chrono, s);
+  }
+  return s;
+}
+
 /** Picks for the next draw, built from every draw so far. `salt` re-rolls the random strategies. */
 export function currentPicks(game, fmt, chrono, nextDate, salt = {}) {
-  const s = newState(fmt);
-  for (let t = 0; t < chrono.length; t++) pushDraw(s, chrono, t);
+  const s = trainedState(game, fmt, chrono);
   const picks = {};
   for (const st of STRATEGIES) {
     const rand = rng(hashString(`${game.id}|${st.id}|next|${nextDate}|${salt[st.id] || 0}`));
@@ -292,14 +398,15 @@ export function currentPicks(game, fmt, chrono, nextDate, salt = {}) {
  * draws; the line is then scored against what was actually drawn.
  */
 export function backtest(game, fmt, chrono, start = 100) {
-  const s = newState(fmt);
+  const s = newState(fmt, game);
   const results = STRATEGIES.map((st) => ({ id: st.id, n: 0, matched: 0, prizes: 0, best: null }));
   for (let t = 0; t < chrono.length; t++) {
     const draw = chrono[t];
     if (t >= start) {
       STRATEGIES.forEach((st, i) => {
-        const rand = rng(hashString(`${game.id}|${st.id}|${draw.date}|${draw.round || 1}`));
-        const pick = makePick(st.id, game, fmt, s, rand);
+        // The RL agent is scored on the line it actually played, the one it then learns from.
+        const pick = st.id === 'rl' ? rlPlay(s, draw)
+          : makePick(st.id, game, fmt, s, rng(hashString(`${game.id}|${st.id}|${draw.date}|${draw.round || 1}`)));
         const { tier, m, b } = classify(game, pick, draw);
         const r = results[i];
         r.n++;
@@ -310,6 +417,7 @@ export function backtest(game, fmt, chrono, start = 100) {
     }
     pushDraw(s, chrono, t);
   }
+  if (!trained.has(chrono)) trained.set(chrono, s);
   const { count: K, max: N } = fmt.main;
   const n = results[0].n;
   const mean = (K * K) / N; // expected matches for any line, whatever the method

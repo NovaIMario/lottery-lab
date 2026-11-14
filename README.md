@@ -18,7 +18,7 @@ For each game it has:
 
 - **Latest result:** the winning numbers, the jackpot (or the jackpot odds where no jackpot figure is published in the data), the prize breakdown where one is available, the next draw date and the estimated jackpot.
 - **Full history:** every draw since the game's current format began, filterable by year.
-- **Picks for the next draw:** six number-picking methods (hot, cold, overdue, balanced, unpopular and Lucky Dip or Quick Pick).
+- **Picks for the next draw:** seven number-picking methods: a reinforcement-learning agent, hot, cold, overdue, balanced, unpopular and Lucky Dip or Quick Pick.
 - **A backtest:** before each of hundreds of past draws, every method picked a line using only the results known at the time. Each line was then scored against the real draw. None of the methods beats chance, and the chart shows that against the range luck alone produces.
 - **Statistics:** how often each number comes up, the numbers waiting longest, the totals of the main numbers, odd/even splits, numbers repeated from the previous draw and common pairs. Each chart is drawn against what random draws would produce and has a table view.
 - **Check your numbers:** choose a line and see every prize it would have won.
@@ -38,6 +38,19 @@ One thing does make a difference. For prizes that are shared, such as the EuroMi
 Eurojackpot and Powerball jackpots, the numbers other players avoid change how much you'd keep.
 Your chance of winning stays the same. Many people pick birthdays (1 to 31), 7 and neat
 patterns. The **Unpopular** method leans away from those.
+
+### The reinforcement-learning agent
+
+The **RL agent** is a Thompson-sampling bandit. Each number is an arm with a Beta belief about how
+often it's drawn, starting with no opinion. Before every past draw, the agent samples a rate for each
+number from its beliefs and plays the numbers with the highest samples. It gets a reward of 1 for each
+of its numbers that comes up, and it updates its beliefs only for the numbers it played. The sampling
+keeps it trying numbers it's unsure about. Its pick for the next draw comes from everything it has
+learned, and the Re-roll button draws another sample.
+
+It learns online, one draw at a time, so the backtest scores the line it actually played before each
+draw. Like every other method, it stays inside the range luck alone produces. The card shows the
+spread of its estimates for each number next to the true chance, which is the same for every number.
 
 ## Where the data comes from
 
