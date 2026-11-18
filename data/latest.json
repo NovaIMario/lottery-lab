@@ -1,26 +1,26 @@
 {
-  "updated": "2026-11-17T21:03:13.356Z",
+  "updated": "2026-11-18T01:35:16.417Z",
   "games": {
     "euromillions": {
-      "drawNumber": 1998,
-      "date": "2026-11-13",
+      "drawNumber": 1999,
+      "date": "2026-11-17",
       "rounds": [
         {
           "main": [
-            16,
-            27,
-            32,
-            41,
-            45
+            35,
+            37,
+            38,
+            46,
+            48
           ],
           "bonus": [
-            2,
-            12
+            1,
+            2
           ]
         }
       ],
       "confirmed": true,
-      "jackpot": "£14,195,000",
+      "jackpot": "£21,565,553",
       "jackpotWinners": 0,
       "tiers": [
         {
@@ -31,62 +31,62 @@
         {
           "level": 2,
           "winners": 2,
-          "total": 259362.2
+          "total": 227542.2
         },
         {
           "level": 3,
-          "winners": 3,
-          "total": 45462.9
+          "winners": 0,
+          "total": 0
         },
         {
           "level": 4,
-          "winners": 15,
-          "total": 18880.5
+          "winners": 5,
+          "total": 6538.5
         },
         {
           "level": 5,
-          "winners": 203,
-          "total": 19731.6
+          "winners": 88,
+          "total": 12346.4
         },
         {
           "level": 6,
-          "winners": 346,
-          "total": 20137.2
+          "winners": 209,
+          "total": 12372.8
         },
         {
           "level": 7,
-          "winners": 473,
-          "total": 14426.5
+          "winners": 215,
+          "total": 8385
         },
         {
           "level": 8,
-          "winners": 4895,
-          "total": 66572
+          "winners": 2971,
+          "total": 43970.8
         },
         {
           "level": 9,
-          "winners": 7329,
-          "total": 73290
+          "winners": 4182,
+          "total": 49765.8
         },
         {
           "level": 10,
-          "winners": 18764,
-          "total": 138853.6
+          "winners": 10233,
+          "total": 96190.2
         },
         {
           "level": 11,
-          "winners": 25274,
-          "total": 159226.2
+          "winners": 15769,
+          "total": 108806.1
         },
         {
           "level": 12,
-          "winners": 103614,
-          "total": 497347.2
+          "winners": 66435,
+          "total": 352105.5
         },
         {
           "level": 13,
-          "winners": 254468,
-          "total": 788850.8
+          "winners": 159427,
+          "total": 573937.2
         }
       ],
       "nextDraw": "2026-11-20",
