@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-19T01:07:38.563Z",
+  "updated": "2026-11-19T20:46:46.267Z",
   "games": {
     "euromillions": {
       "drawNumber": 1999,
@@ -260,16 +260,16 @@
       "nextJackpot": "£500,000"
     },
     "set-for-life": {
-      "drawNumber": 801,
-      "date": "2026-11-16",
+      "drawNumber": 802,
+      "date": "2026-11-19",
       "rounds": [
         {
           "main": [
-            7,
+            6,
             11,
-            12,
-            32,
-            42
+            15,
+            36,
+            40
           ],
           "bonus": [
             9
@@ -277,12 +277,12 @@
         }
       ],
       "confirmed": true,
-      "jackpotWinners": 1,
+      "jackpotWinners": 0,
       "tiers": [
         {
           "level": 1,
-          "winners": 1,
-          "text": "£10,000 every month for 30 years"
+          "winners": 0,
+          "text": "£0"
         },
         {
           "level": 2,
@@ -291,36 +291,36 @@
         },
         {
           "level": 3,
-          "winners": 17,
-          "total": 4250
+          "winners": 31,
+          "total": 7750
         },
         {
           "level": 4,
-          "winners": 224,
-          "total": 11200
+          "winners": 217,
+          "total": 10850
         },
         {
           "level": 5,
-          "winners": 1166,
-          "total": 34980
+          "winners": 992,
+          "total": 29760
         },
         {
           "level": 6,
-          "winners": 10257,
-          "total": 205140
+          "winners": 8903,
+          "total": 178060
         },
         {
           "level": 7,
-          "winners": 15816,
-          "total": 158160
+          "winners": 14139,
+          "total": 141390
         },
         {
           "level": 8,
-          "winners": 137841,
-          "total": 689205
+          "winners": 122858,
+          "total": 614290
         }
       ],
-      "nextDraw": "2026-11-19",
+      "nextDraw": "2026-11-23",
       "nextJackpot": "£10,000 every month for 30 years"
     },
     "irish-lotto": {
