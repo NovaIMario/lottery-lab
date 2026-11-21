@@ -1,26 +1,26 @@
 {
-  "updated": "2026-11-19T20:46:46.267Z",
+  "updated": "2026-11-21T00:45:50.351Z",
   "games": {
     "euromillions": {
-      "drawNumber": 1999,
-      "date": "2026-11-17",
+      "drawNumber": 2000,
+      "date": "2026-11-20",
       "rounds": [
         {
           "main": [
-            35,
-            37,
-            38,
-            46,
-            48
+            8,
+            21,
+            24,
+            36,
+            49
           ],
           "bonus": [
             1,
-            2
+            8
           ]
         }
       ],
       "confirmed": true,
-      "jackpot": "£21,565,553",
+      "jackpot": "£31,727,888",
       "jackpotWinners": 0,
       "tiers": [
         {
@@ -30,67 +30,67 @@
         },
         {
           "level": 2,
-          "winners": 2,
-          "total": 227542.2
+          "winners": 1,
+          "total": 225959.9
         },
         {
           "level": 3,
-          "winners": 0,
-          "total": 0
+          "winners": 2,
+          "total": 16249.4
         },
         {
           "level": 4,
-          "winners": 5,
-          "total": 6538.5
+          "winners": 9,
+          "total": 8972.1
         },
         {
           "level": 5,
-          "winners": 88,
-          "total": 12346.4
+          "winners": 156,
+          "total": 14211.6
         },
         {
           "level": 6,
-          "winners": 209,
-          "total": 12372.8
+          "winners": 367,
+          "total": 16441.6
         },
         {
           "level": 7,
-          "winners": 215,
-          "total": 8385
+          "winners": 390,
+          "total": 10920
         },
         {
           "level": 8,
-          "winners": 2971,
-          "total": 43970.8
+          "winners": 5429,
+          "total": 58633.2
         },
         {
           "level": 9,
-          "winners": 4182,
-          "total": 49765.8
+          "winners": 7756,
+          "total": 65926
         },
         {
           "level": 10,
-          "winners": 10233,
-          "total": 96190.2
+          "winners": 17611,
+          "total": 123277
         },
         {
           "level": 11,
-          "winners": 15769,
-          "total": 108806.1
+          "winners": 28700,
+          "total": 146370
         },
         {
           "level": 12,
-          "winners": 66435,
-          "total": 352105.5
+          "winners": 110951,
+          "total": 454899.1
         },
         {
           "level": 13,
-          "winners": 159427,
-          "total": 573937.2
+          "winners": 259736,
+          "total": 753234.4
         }
       ],
-      "nextDraw": "2026-11-20",
-      "nextJackpot": "£31,000,000"
+      "nextDraw": "2026-11-24",
+      "nextJackpot": "£39,000,000"
     },
     "lotto": {
       "drawNumber": 3225,
@@ -191,19 +191,19 @@
       "nextJackpot": "£12,000,000"
     },
     "thunderball": {
-      "drawNumber": 4011,
-      "date": "2026-11-18",
+      "drawNumber": 4012,
+      "date": "2026-11-20",
       "rounds": [
         {
           "main": [
-            6,
-            18,
-            25,
-            27,
-            38
+            2,
+            9,
+            14,
+            29,
+            30
           ],
           "bonus": [
-            13
+            11
           ]
         }
       ],
@@ -222,41 +222,41 @@
         },
         {
           "level": 3,
-          "winners": 21,
-          "total": 5250
+          "winners": 25,
+          "total": 6250
         },
         {
           "level": 4,
-          "winners": 288,
-          "total": 28800
+          "winners": 312,
+          "total": 31200
         },
         {
           "level": 5,
-          "winners": 730,
-          "total": 14600
+          "winners": 822,
+          "total": 16440
         },
         {
           "level": 6,
-          "winners": 9751,
-          "total": 97510
+          "winners": 10394,
+          "total": 103940
         },
         {
           "level": 7,
-          "winners": 7998,
-          "total": 79980
+          "winners": 8275,
+          "total": 82750
         },
         {
           "level": 8,
-          "winners": 30800,
-          "total": 154000
+          "winners": 32596,
+          "total": 162980
         },
         {
           "level": 9,
-          "winners": 37545,
-          "total": 112635
+          "winners": 38856,
+          "total": 116568
         }
       ],
-      "nextDraw": "2026-11-20",
+      "nextDraw": "2026-11-21",
       "nextJackpot": "£500,000"
     },
     "set-for-life": {
@@ -324,7 +324,7 @@
       "nextJackpot": "£10,000 every month for 30 years"
     },
     "irish-lotto": {
-      "date": "2026-11-16",
+      "date": "2026-11-18",
       "confirmed": true,
       "jackpotWinners": 0,
       "tiers": [
@@ -334,7 +334,7 @@
             0
           ],
           "winners": 0,
-          "each": 2900739
+          "each": 3151260
         },
         {
           "match": [
@@ -342,46 +342,46 @@
             1
           ],
           "winners": 0,
-          "each": 57399
+          "each": 85009
         },
         {
           "match": [
             5,
             0
           ],
-          "winners": 9,
-          "each": 1023
+          "winners": 15,
+          "each": 1118
         },
         {
           "match": [
             4,
             1
           ],
-          "winners": 26,
-          "each": 89
+          "winners": 38,
+          "each": 111
         },
         {
           "match": [
             4,
             0
           ],
-          "winners": 360,
-          "each": 39
+          "winners": 610,
+          "each": 42
         },
         {
           "match": [
             3,
             1
           ],
-          "winners": 612,
-          "each": 15
+          "winners": 944,
+          "each": 18
         },
         {
           "match": [
             2,
             1
           ],
-          "winners": 5505,
+          "winners": 8842,
           "each": 4
         },
         {
@@ -389,115 +389,115 @@
             3,
             0
           ],
-          "winners": 6144,
+          "winners": 10091,
           "each": 4
         }
       ],
-      "jackpot": "€2,900,739"
+      "jackpot": "€3,151,260"
     },
     "eurojackpot": {
-      "date": "2026-11-17",
+      "date": "2026-11-20",
       "confirmed": true,
-      "jackpotWinners": 2,
+      "jackpotWinners": 1,
       "tiers": [
         {
           "match": [
             5,
             2
           ],
-          "winners": 2,
-          "each": 38370583.3
+          "winners": 1,
+          "each": 10000000
         },
         {
           "match": [
             5,
             1
           ],
-          "winners": 12,
-          "each": 159172
+          "winners": 3,
+          "each": 579803.8
         },
         {
           "match": [
             5,
             0
           ],
-          "winners": 26,
-          "each": 41430.2
+          "winners": 6,
+          "each": 163491.2
         },
         {
           "match": [
             4,
             2
           ],
-          "winners": 38,
-          "each": 4675.7
+          "winners": 33,
+          "each": 4903.2
         },
         {
           "match": [
             4,
             1
           ],
-          "winners": 1241,
-          "each": 178.9
+          "winners": 575,
+          "each": 351.7
         },
         {
           "match": [
             3,
             2
           ],
-          "winners": 1647,
-          "each": 148.3
+          "winners": 1748,
+          "each": 131.5
         },
         {
           "match": [
             4,
             0
           ],
-          "winners": 3188,
-          "each": 55.7
+          "winners": 1174,
+          "each": 131.5
         },
         {
           "match": [
             2,
             2
           ],
-          "winners": 19950,
-          "each": 28.3
+          "winners": 26232,
+          "each": 20
         },
         {
           "match": [
             3,
             1
           ],
-          "winners": 38992,
-          "each": 16.2
+          "winners": 28362,
+          "each": 20
         },
         {
           "match": [
             3,
             0
           ],
-          "winners": 98622,
-          "each": 13.8
+          "winners": 57529,
+          "each": 18.9
         },
         {
           "match": [
             1,
             2
           ],
-          "winners": 96700,
-          "each": 13.8
+          "winners": 135656,
+          "each": 10
         },
         {
           "match": [
             2,
             1
           ],
-          "winners": 456310,
-          "each": 9.8
+          "winners": 444930,
+          "each": 9.2
         }
       ],
-      "jackpot": "€76,741,167"
+      "jackpot": "€10,000,000"
     }
   }
 }
