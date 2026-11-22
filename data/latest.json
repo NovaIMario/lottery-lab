@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-21T23:46:31.211Z",
+  "updated": "2026-11-22T15:17:05.622Z",
   "games": {
     "euromillions": {
       "drawNumber": 2000,
@@ -324,17 +324,17 @@
       "nextJackpot": "£10,000 every month for 30 years"
     },
     "irish-lotto": {
-      "date": "2026-11-18",
+      "date": "2026-11-21",
       "confirmed": true,
-      "jackpotWinners": 0,
+      "jackpotWinners": 1,
       "tiers": [
         {
           "match": [
             6,
             0
           ],
-          "winners": 0,
-          "each": 3151260
+          "winners": 1,
+          "each": 3539040
         },
         {
           "match": [
@@ -342,46 +342,46 @@
             1
           ],
           "winners": 0,
-          "each": 85009
+          "each": 127746
         },
         {
           "match": [
             5,
             0
           ],
-          "winners": 15,
-          "each": 1118
+          "winners": 21,
+          "each": 1236
         },
         {
           "match": [
             4,
             1
           ],
-          "winners": 38,
-          "each": 111
+          "winners": 40,
+          "each": 163
         },
         {
           "match": [
             4,
             0
           ],
-          "winners": 610,
-          "each": 42
+          "winners": 999,
+          "each": 40
         },
         {
           "match": [
             3,
             1
           ],
-          "winners": 944,
-          "each": 18
+          "winners": 1117,
+          "each": 24
         },
         {
           "match": [
             2,
             1
           ],
-          "winners": 8842,
+          "winners": 10852,
           "each": 4
         },
         {
@@ -389,11 +389,11 @@
             3,
             0
           ],
-          "winners": 10091,
+          "winners": 16484,
           "each": 4
         }
       ],
-      "jackpot": "€3,151,260"
+      "jackpot": "€3,539,040"
     },
     "eurojackpot": {
       "date": "2026-11-20",
