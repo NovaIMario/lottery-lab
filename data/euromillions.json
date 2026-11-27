@@ -1,7 +1,7 @@
 {
   "game": "euromillions",
   "name": "EuroMillions",
-  "updated": "2026-11-25T17:57:38.262Z",
+  "updated": "2026-11-27T21:26:31.031Z",
   "format": {
     "since": "2016-09-27",
     "main": {
@@ -15,6 +15,7 @@
     }
   },
   "draws": [
+    {"date":"2026-11-27","main":[12,17,26,34,38],"bonus":[5,9]},
     {"date":"2026-11-24","main":[3,5,37,44,49],"bonus":[5,6],"jackpot":39445843,"rollover":true},
     {"date":"2026-11-20","main":[8,21,24,36,49],"bonus":[1,8],"jackpot":31727888,"rollover":true},
     {"date":"2026-11-17","main":[35,37,38,46,48],"bonus":[1,2],"jackpot":21565553,"rollover":true},
